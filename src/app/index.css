@@ -1,0 +1,56 @@
+@import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Source+Sans+3:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap');
+
+@import 'tailwindcss';
+
+@theme {
+  --color-linen: #FAF6F0;
+  --color-brown: #4A3728;
+  --color-brown-dark: #3A2A1C;
+  --color-brown-light: #8C705F;
+  --color-amber: #D4A574;
+  --color-amber-light: #E6CBA8;
+  --color-rose: #C9A0A0;
+  --color-rose-light: #E3CDCD;
+  --color-teal: #7BA7A7;
+  --color-teal-light: #B4D1D1;
+  --color-cream: #F5EDE3;
+  --color-wood: #8B5E3C;
+
+  --font-serif: 'Lora', serif;
+  --font-sans: 'Source Sans 3', sans-serif;
+
+  --shadow-warm: 0 4px 14px 0 rgba(74, 55, 40, 0.1);
+  --shadow-warm-lg: 0 10px 25px -5px rgba(74, 55, 40, 0.15);
+}
+
+@layer base {
+  body {
+    background-color: #FAF6F0;
+    color: #4A3728;
+    font-family: 'Source Sans 3', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Lora', serif;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #FAF6F0;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #D4A574;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #C9A0A0;
+}
