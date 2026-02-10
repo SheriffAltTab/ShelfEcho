@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { filterAndNormalizeSubjects } from '../lib/subjects.js';
 
 export const booksRouter = Router();
 
@@ -41,7 +42,7 @@ booksRouter.get('/search', async (req, res) => {
       authors: doc.author_name || [],
       coverId: doc.cover_i,
       firstPublishYear: doc.first_publish_year,
-      subjects: (doc.subject || []).slice(0, 5),
+      subjects: filterAndNormalizeSubjects(doc.subject || []),
       ratingsAverage: doc.ratings_average || 0,
       editionCount: doc.edition_count || 0,
       pageCount: doc.number_of_pages_median || 0,
@@ -107,7 +108,7 @@ booksRouter.get('/details', async (req, res) => {
       title: work.title,
       author: authorName,
       description,
-      subjects: (work.subjects || []).slice(0, 8),
+      subjects: filterAndNormalizeSubjects(work.subjects || []),
       coverId: work.covers?.[0],
       firstPublishDate: work.first_publish_date || '',
       ratingsAverage,
@@ -170,7 +171,7 @@ booksRouter.get('/subject/:subject', async (req, res) => {
       author: doc.authors?.[0]?.name || 'Unknown Author',
       coverId: doc.cover_id,
       firstPublishYear: doc.first_publish_year,
-      subjects: (doc.subject || []).slice(0, 5),
+      subjects: filterAndNormalizeSubjects(doc.subject || []),
     }));
 
     const result = { books, name: data.name };

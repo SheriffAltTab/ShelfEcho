@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, Fragment } from 'react';
 import { motion } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
 import {
@@ -7,13 +7,14 @@ import {
 } from 'recharts';
 import {
   Book, Settings, Edit2, Target, TrendingUp, LogOut, Award,
-  X, Plus, Check, Camera, Upload, Lock, Mail,
+  X, Plus, Check, Camera, Upload, Lock, Mail, ChevronDown, ChevronRight,
 } from 'lucide-react';
 import { Button } from '@/shared/ui/Button';
 import { Badge } from '@/shared/ui/Badge';
 import { useAuth } from '@/features/auth/model/authContext';
-import { getUserStats, updateProfile, getGenreBreakdown } from '@/features/auth/api/authApi';
+import { getUserStats, updateProfile, getGenreBreakdown, syncAchievements } from '@/features/auth/api/authApi';
 import apiClient from '@/shared/api/apiClient';
+import { GENRE_HIERARCHY } from '@/shared/config/genreHierarchy';
 
 interface Stats {
   totalBooks: number;
@@ -22,7 +23,30 @@ interface Stats {
   wantBooks: number;
   reviews: number;
   favorites: number;
+  completedFromWantList?: boolean;
+  earnedAchievementIds?: number[];
   monthlyReading: { month: string; count: number }[];
+}
+
+/** Longest run of consecutive months (1–12, wrap 12→1) with count > 0 */
+function maxConsecutiveMonths(monthlyReading: { month: string; count: number }[] | undefined): number {
+  if (!monthlyReading?.length) return 0;
+  const monthsWithActivity = monthlyReading
+    .filter((m) => m.count > 0)
+    .map((m) => parseInt(m.month, 10))
+    .filter((n) => n >= 1 && n <= 12);
+  if (monthsWithActivity.length === 0) return 0;
+  const sorted = [...new Set(monthsWithActivity)].sort((a, b) => a - b);
+  const withNextYear = sorted.concat(sorted.map((m) => m + 12));
+  withNextYear.sort((a, b) => a - b);
+  let maxRun = 1;
+  let run = 1;
+  for (let i = 1; i < withNextYear.length; i++) {
+    if (withNextYear[i] === withNextYear[i - 1] + 1) run++;
+    else run = 1;
+    maxRun = Math.max(maxRun, run);
+  }
+  return maxRun;
 }
 
 interface GenreItem {
@@ -31,38 +55,58 @@ interface GenreItem {
   percent: number;
 }
 
-const ALL_GENRES = [
-  'Literary Fiction', 'Mystery', 'Sci-Fi', 'Fantasy', 'Romance',
-  'Thriller', 'History', 'Biography', 'Poetry', 'Self-Help',
-  'Cooking', 'Art', 'Travel', 'Nature', 'Horror', 'Philosophy',
-  'Psychology', 'Science', 'Comics', 'Children',
-];
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const GENRE_COLORS = ['#D4A574', '#7BA7A7', '#C9A0A0', '#8C705F', '#b08968', '#6d9a9a', '#a8856c', '#8db3b3'];
 
+const VISIBLE_ACHIEVEMENTS = 6;
+
+// Sorted by logical progression (easier first). Unique emojis per achievement.
 const achievements = [
-  { id: 1, title: 'Bookworm', description: 'Read 10 books', icon: '📚', threshold: (s: Stats) => s.readBooks >= 10 },
-  { id: 2, title: 'First Steps', description: 'Add first book', icon: '👣', threshold: (s: Stats) => s.totalBooks >= 1 },
-  { id: 3, title: 'Genre Explorer', description: 'Read 5 genres', icon: '🗺️', threshold: (_s: Stats, gc: number) => gc >= 5 },
-  { id: 4, title: 'Critic', description: 'Write 5 reviews', icon: '✍️', threshold: (s: Stats) => s.reviews >= 5 },
-  { id: 5, title: 'Centurion', description: 'Read 100 books', icon: '🏆', threshold: (s: Stats) => s.readBooks >= 100 },
-  { id: 6, title: 'Collector', description: '20 books in library', icon: '📖', threshold: (s: Stats) => s.totalBooks >= 20 },
+  { id: 1, title: 'First Steps', description: 'Add first book', icon: '👣', threshold: (s: Stats) => s.totalBooks >= 1 },
+  { id: 2, title: 'Wishlist', description: 'Add first want-to-read', icon: '🔖', threshold: (s: Stats) => s.wantBooks >= 1 },
+  { id: 3, title: 'From the List', description: 'Mark as read a book from Want to Read', icon: '📌', threshold: (s: Stats) => !!s.completedFromWantList },
+  { id: 4, title: 'Reviewer', description: 'Write first review', icon: '🖊️', threshold: (s: Stats) => s.reviews >= 1 },
+  { id: 5, title: 'Dabbler', description: 'Read 2 genres', icon: '🎲', threshold: (_s: Stats, gc: number) => gc >= 2 },
+  { id: 6, title: 'Explorer', description: 'Read 3 genres', icon: '🧭', threshold: (_s: Stats, gc: number) => gc >= 3 },
+  { id: 7, title: 'Page Turner', description: 'Reading 3 books at once', icon: '📑', threshold: (s: Stats) => s.readingBooks >= 3 },
+  { id: 8, title: 'Genre Explorer', description: 'Read 5 genres', icon: '🗺️', threshold: (_s: Stats, gc: number) => gc >= 5 },
+  { id: 9, title: 'Critic', description: 'Write 5 reviews', icon: '✍️', threshold: (s: Stats) => s.reviews >= 5 },
+  { id: 10, title: 'Favorites', description: 'Add 5 favorites', icon: '❤️', threshold: (s: Stats) => s.favorites >= 5 },
+  { id: 11, title: 'Bookworm', description: 'Read 10 books', icon: '📚', threshold: (s: Stats) => s.readBooks >= 10 },
+  { id: 12, title: 'Book Lover', description: '10 favorite books', icon: '💕', threshold: (s: Stats) => s.favorites >= 10 },
+  { id: 13, title: 'Super Critic', description: 'Write 10 reviews', icon: '⭐', threshold: (s: Stats) => s.reviews >= 10 },
+  { id: 14, title: 'Genre Master', description: 'Read 10 genres', icon: '🎯', threshold: (_s: Stats, gc: number) => gc >= 10 },
+  { id: 15, title: 'Collector', description: '20 books in library', icon: '📖', threshold: (s: Stats) => s.totalBooks >= 20 },
+  { id: 16, title: 'Curator', description: '20 favorite books', icon: '💎', threshold: (s: Stats) => s.favorites >= 20 },
+  { id: 17, title: 'Avid Reader', description: 'Read 25 books', icon: '📗', threshold: (s: Stats) => s.readBooks >= 25 },
+  { id: 18, title: 'Reviewer Pro', description: 'Write 25 reviews', icon: '📝', threshold: (s: Stats) => s.reviews >= 25 },
+  { id: 19, title: 'Monthly Reader', description: 'Read in at least one month', icon: '📅', threshold: (s: Stats) => (s.monthlyReading?.some((m) => m.count >= 1) ?? false) },
+  { id: 20, title: 'Consistent', description: 'Read in 3 months in a row', icon: '🔄', threshold: (s: Stats) => maxConsecutiveMonths(s.monthlyReading) >= 3 },
+  { id: 21, title: 'Speed Reader', description: '5+ books in one month', icon: '⚡', threshold: (s: Stats) => (s.monthlyReading?.some((m) => m.count >= 5) ?? false) },
+  { id: 22, title: 'Dedicated', description: 'Read in 6 months in a row', icon: '💪', threshold: (s: Stats) => maxConsecutiveMonths(s.monthlyReading) >= 6 },
+  { id: 23, title: 'Plan Ahead', description: '10 books on want list', icon: '📋', threshold: (s: Stats) => s.wantBooks >= 10 },
+  { id: 24, title: 'Library Builder', description: '50 books in library', icon: '🏛️', threshold: (s: Stats) => s.totalBooks >= 50 },
+  { id: 25, title: 'Completionist', description: 'Read 50 books', icon: '✅', threshold: (s: Stats) => s.readBooks >= 50 },
+  { id: 26, title: 'Stack Builder', description: 'Reading 5 books at once', icon: '📦', threshold: (s: Stats) => s.readingBooks >= 5 },
+  { id: 27, title: 'Bibliophile', description: '100 books in library', icon: '🌟', threshold: (s: Stats) => s.totalBooks >= 100 },
+  { id: 28, title: 'Centurion', description: 'Read 100 books', icon: '🏆', threshold: (s: Stats) => s.readBooks >= 100 },
+  { id: 29, title: 'Prolific', description: 'Read 200 books', icon: '🔥', threshold: (s: Stats) => s.readBooks >= 200 },
+  { id: 30, title: 'Legend', description: 'Read 500 books', icon: '👑', threshold: (s: Stats) => s.readBooks >= 500 },
 ];
 
 // Custom label that shows percentage on each pie segment
 // Recharts passes all data fields + its own calculated fields to label function.
 // We use "pct" (our field) to avoid collision with Recharts' "percent" field.
-const renderCustomLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, pct, value }: any) => {
-  // Use our pct field (integer 0-100) from the data if available
+const renderCustomLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, pct }: any) => {
   const displayPercent = typeof pct === 'number' ? pct : 0;
-  if (displayPercent < 3) return null; // Don't show label for tiny segments
+  if (displayPercent < 3) return null;
   const RADIAN = Math.PI / 180;
   const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
   const x = cx + radius * Math.cos(-midAngle * RADIAN);
   const y = cy + radius * Math.sin(-midAngle * RADIAN);
   return (
-    <text x={x} y={y} fill="#fff" textAnchor="middle" dominantBaseline="central" fontSize={11} fontWeight="bold">
+    <text x={x} y={y} fill="#fff" textAnchor="middle" dominantBaseline="central" fontSize={11} fontWeight="bold" style={{ pointerEvents: 'none' }}>
       {`${displayPercent}%`}
     </text>
   );
@@ -86,11 +130,14 @@ export function ProfilePage() {
   const [settingsError, setSettingsError] = useState('');
   const [settingsSuccess, setSettingsSuccess] = useState('');
 
-  // Genre editing
+  // Genre editing (hierarchical: main + secondaries)
   const [editingGenres, setEditingGenres] = useState(false);
   const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
+  const [expandedMain, setExpandedMain] = useState<string | null>(null);
   const [genreSaving, setGenreSaving] = useState(false);
   const [genreError, setGenreError] = useState('');
+
+  const [showAllAchievements, setShowAllAchievements] = useState(false);
 
   // Photo modal
   const [showPhotoModal, setShowPhotoModal] = useState(false);
@@ -165,6 +212,7 @@ export function ProfilePage() {
       await updateProfile({ favoriteGenres: selectedGenres });
       await refreshUser();
       setEditingGenres(false);
+      setExpandedMain(null);
     } catch (err: any) {
       console.error('Failed to save genres:', err);
       setGenreError(err?.response?.data?.error || 'Failed to save genres');
@@ -173,9 +221,14 @@ export function ProfilePage() {
   };
 
   const toggleGenre = (genre: string) => {
-    setSelectedGenres((prev) =>
-      prev.includes(genre) ? prev.filter((g) => g !== genre) : [...prev, genre]
-    );
+    setSelectedGenres((prev) => {
+      const next = prev.includes(genre) ? prev.filter((g) => g !== genre) : [...prev, genre];
+      if (!prev.includes(genre) && next.includes(genre)) {
+        const group = GENRE_HIERARCHY.find((g) => g.main === genre);
+        if (group) setExpandedMain(group.main);
+      }
+      return next;
+    });
   };
 
   // ---------- Photo Upload ----------
@@ -226,14 +279,15 @@ export function ProfilePage() {
     setPhotoUploading(false);
   };
 
-  // ---------- Chart Data ----------
-  const readData = MONTH_NAMES.map((name, idx) => {
+  // ---------- Chart Data (last 6 months) ----------
+  const now = new Date();
+  const currentMonthIdx = now.getMonth();
+  const last6MonthIndices = [0, 1, 2, 3, 4, 5].map((i) => (currentMonthIdx - 5 + i + 12) % 12);
+  const chartData = last6MonthIndices.map((idx) => {
     const monthNum = String(idx + 1).padStart(2, '0');
     const entry = stats?.monthlyReading?.find((m) => m.month === monthNum);
-    return { name, books: entry?.count || 0 };
-  }).filter((_, idx) => idx < new Date().getMonth() + 1 || stats?.monthlyReading?.some((m) => parseInt(m.month) > new Date().getMonth() + 1));
-
-  const chartData = readData.length > 0 ? readData : MONTH_NAMES.slice(0, 6).map((name) => ({ name, books: 0 }));
+    return { name: MONTH_NAMES[idx], books: entry?.count ?? 0 };
+  });
 
   // Genre breakdown from real reading data
   // NOTE: Do NOT include a field named "percent" — it conflicts with Recharts' internal percent prop
@@ -248,11 +302,27 @@ export function ProfilePage() {
 
   const favoriteGenres = user?.favoriteGenres || [];
 
-  const earnedAchievements = achievements.map((a) => ({
-    ...a,
-    earned: stats ? a.threshold(stats, genreBreakdown.length) : false,
-  }));
+  const permanentIds = stats?.earnedAchievementIds ?? [];
+  const genreCount = genreBreakdown.length;
+  const earnedAchievements = achievements.map((a) => {
+    const currentEarned = stats ? a.threshold(stats, genreCount) : false;
+    const earned = currentEarned || permanentIds.includes(a.id);
+    return { ...a, earned };
+  });
   const earnedCount = earnedAchievements.filter((a) => a.earned).length;
+
+  // Persist newly earned achievements (once earned, kept forever)
+  useEffect(() => {
+    if (!stats) return;
+    const permanent = stats.earnedAchievementIds ?? [];
+    const nowEarnedIds = achievements
+      .filter((a) => permanent.includes(a.id) || a.threshold(stats, genreBreakdown.length))
+      .map((a) => a.id);
+    const newIds = nowEarnedIds.filter((id) => !permanent.includes(id));
+    if (newIds.length > 0) {
+      syncAchievements([...permanent, ...newIds]).catch(() => {});
+    }
+  }, [stats, genreBreakdown.length]);
 
   return (
     <div className="space-y-8">
@@ -314,17 +384,45 @@ export function ProfilePage() {
           ) : (
             <div className="flex gap-2 items-center">
               {genreError && <span className="text-rose text-xs">{genreError}</span>}
-              <Button variant="ghost" size="sm" onClick={() => setEditingGenres(false)}><X size={14} /></Button>
+              <Button variant="ghost" size="sm" onClick={() => { setEditingGenres(false); setExpandedMain(null); }}><X size={14} /></Button>
               <Button variant="secondary" size="sm" onClick={saveGenres} isLoading={genreSaving} leftIcon={<Check size={14} />}>Save</Button>
             </div>
           )}
         </div>
         {editingGenres ? (
-          <div className="flex flex-wrap gap-2">
-            {ALL_GENRES.map((genre) => (
-              <Badge key={genre} variant={selectedGenres.includes(genre) ? 'amber' : 'default'} onClick={() => toggleGenre(genre)} selected={selectedGenres.includes(genre)} className="text-base px-4 py-2 cursor-pointer">
-                {genre}
-              </Badge>
+          <div className="flex flex-wrap gap-2 items-center">
+            {GENRE_HIERARCHY.map((group) => (
+              <Fragment key={group.main}>
+                <div className="flex items-center gap-0.5 flex-shrink-0">
+                  <Badge
+                    variant={selectedGenres.includes(group.main) ? 'amber' : 'default'}
+                    onClick={() => toggleGenre(group.main)}
+                    selected={selectedGenres.includes(group.main)}
+                    className="text-base px-4 py-2 cursor-pointer"
+                  >
+                    {group.main}
+                  </Badge>
+                  <button
+                    type="button"
+                    onClick={() => setExpandedMain((m) => (m === group.main ? null : group.main))}
+                    className="p-1 rounded text-brown/50 hover:text-brown hover:bg-brown/5 flex-shrink-0"
+                    aria-label={expandedMain === group.main ? 'Collapse' : 'Expand'}
+                  >
+                    {expandedMain === group.main ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                  </button>
+                </div>
+                {expandedMain === group.main && group.secondaries.map((genre) => (
+                  <Badge
+                    key={genre}
+                    variant={selectedGenres.includes(genre) ? 'amber' : 'default'}
+                    onClick={() => toggleGenre(genre)}
+                    selected={selectedGenres.includes(genre)}
+                    className="text-base px-4 py-2 cursor-pointer flex-shrink-0"
+                  >
+                    {genre}
+                  </Badge>
+                ))}
+              </Fragment>
             ))}
           </div>
         ) : (
@@ -352,7 +450,11 @@ export function ProfilePage() {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData}>
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#8C705F' }} />
-                <Tooltip cursor={{ fill: '#FAF6F0' }} contentStyle={{ backgroundColor: '#FFF', borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
+                <Tooltip
+                  cursor={{ fill: '#FAF6F0' }}
+                  contentStyle={{ backgroundColor: '#FFF', borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                  formatter={(value: number, name: string) => [value === 1 ? '1 book' : `${value} books`, name]}
+                />
                 <Bar dataKey="books" radius={[4, 4, 0, 0]}>
                   {chartData.map((_entry, index) => (
                     <Cell key={`cell-${index}`} fill={index % 2 === 0 ? '#D4A574' : '#C9A0A0'} />
@@ -393,7 +495,7 @@ export function ProfilePage() {
                       ))}
                     </Pie>
                     <Tooltip
-                      formatter={(value: number, name: string) => [`${value} books`, name]}
+                      formatter={(value: number, name: string) => [value === 1 ? '1 book' : `${value} books`, name]}
                       contentStyle={{ backgroundColor: '#FFF', borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
                     />
                   </PieChart>
@@ -421,7 +523,7 @@ export function ProfilePage() {
           <span className="text-sm text-brown/50">{earnedCount} of {achievements.length} earned</span>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4">
-          {earnedAchievements.map((achievement) => (
+          {(showAllAchievements ? earnedAchievements : earnedAchievements.slice(0, VISIBLE_ACHIEVEMENTS)).map((achievement) => (
             <motion.div
               key={achievement.id}
               whileHover={{ scale: 1.05 }}
@@ -435,6 +537,22 @@ export function ProfilePage() {
             </motion.div>
           ))}
         </div>
+        {achievements.length > VISIBLE_ACHIEVEMENTS && (
+          <div className="mt-4 flex justify-center">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setShowAllAchievements((v) => !v)}
+              className="flex items-center gap-1"
+            >
+              {showAllAchievements ? (
+                <>Show less <ChevronDown className="rotate-180 w-4 h-4" /></>
+              ) : (
+                <>Show all {achievements.length} <ChevronDown className="w-4 h-4" /></>
+              )}
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Reading Goal */}

@@ -25,9 +25,23 @@ export async function completeOnboarding(favoriteGenres: string[], readingGoal: 
   await apiClient.put('/user/onboard', { favoriteGenres, readingGoal });
 }
 
-export async function getUserStats() {
+export async function getUserStats(): Promise<{
+  totalBooks: number;
+  readBooks: number;
+  readingBooks: number;
+  wantBooks: number;
+  reviews: number;
+  favorites: number;
+  completedFromWantList?: boolean;
+  earnedAchievementIds?: number[];
+  monthlyReading: { month: string; count: number }[];
+}> {
   const { data } = await apiClient.get('/user/stats');
   return data;
+}
+
+export async function syncAchievements(ids: number[]): Promise<void> {
+  await apiClient.post('/user/achievements/sync', { ids });
 }
 
 export async function getGenreBreakdown(): Promise<{ genres: { name: string; count: number; percent: number }[] }> {

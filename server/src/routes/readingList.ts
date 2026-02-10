@@ -36,6 +36,13 @@ readingListRouter.post('/', (req: AuthRequest, res: Response) => {
     res.status(201).json({ success: true });
   } catch (err: any) {
     if (err.message?.includes('UNIQUE constraint')) {
+      if (status === 'read') {
+        const row = db.prepare('SELECT status FROM reading_list WHERE user_id = ? AND book_key = ?')
+          .get(req.userId!, bookKey) as any;
+        if (row?.status === 'want') {
+          db.prepare('UPDATE users SET completed_from_want_list = 1 WHERE id = ?').run(req.userId!);
+        }
+      }
       db.prepare('UPDATE reading_list SET status = ? WHERE user_id = ? AND book_key = ?')
         .run(status, req.userId!, bookKey);
       res.json({ success: true, updated: true });
@@ -53,6 +60,15 @@ readingListRouter.put('/item', (req: AuthRequest, res: Response) => {
 
   const updates: string[] = [];
   const values: any[] = [];
+
+  // When moving a book from "want" to "read", mark user as completed from want list
+  if (status === 'read') {
+    const row = db.prepare('SELECT status FROM reading_list WHERE user_id = ? AND book_key = ?')
+      .get(req.userId!, bookKey) as any;
+    if (row?.status === 'want') {
+      db.prepare('UPDATE users SET completed_from_want_list = 1 WHERE id = ?').run(req.userId!);
+    }
+  }
 
   if (status !== undefined) { updates.push('status = ?'); values.push(status); }
   if (progress !== undefined) { updates.push('progress = ?'); values.push(progress); }

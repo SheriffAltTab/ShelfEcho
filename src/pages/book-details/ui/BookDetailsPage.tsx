@@ -14,6 +14,7 @@ import { addToReadingList, checkReadingList, updateReadingItem } from '@/shared/
 import { getComments, addComment, editComment, deleteComment, type Comment } from '@/features/comments/api/commentsApi';
 import { bookPath } from '@/shared/lib/bookKeys';
 import { useAuth } from '@/features/auth/model/authContext';
+import { BookDescription } from '@/shared/ui/BookDescription';
 
 export function BookDetailsPage() {
   const location = useLocation();
@@ -368,7 +369,9 @@ export function BookDetailsPage() {
             )}
 
             {book.description && (
-              <p className="text-lg text-brown/80 leading-relaxed font-serif mb-8">{book.description}</p>
+              <div className="mb-8 text-lg">
+                <BookDescription text={book.description} />
+              </div>
             )}
 
             <div className="grid grid-cols-2 gap-4 border-y border-brown/10 py-6">

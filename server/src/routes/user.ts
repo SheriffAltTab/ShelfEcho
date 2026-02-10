@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import db from '../db.js';
 import { authMiddleware, type AuthRequest } from '../middleware.js';
 import type { Response } from 'express';
+import { filterAndNormalizeSubjects } from '../lib/subjects.js';
 
 export const userRouter = Router();
 
@@ -88,6 +89,8 @@ userRouter.get('/stats', authMiddleware, (req: AuthRequest, res: Response) => {
   const wantBooks = db.prepare("SELECT COUNT(*) as count FROM reading_list WHERE user_id = ? AND status = 'want'").get(req.userId!) as any;
   const reviews = db.prepare('SELECT COUNT(*) as count FROM comments WHERE user_id = ?').get(req.userId!) as any;
   const favorites = db.prepare('SELECT COUNT(*) as count FROM favorites WHERE user_id = ?').get(req.userId!) as any;
+  const user = db.prepare('SELECT completed_from_want_list FROM users WHERE id = ?').get(req.userId!) as any;
+  const earnedRows = db.prepare('SELECT achievement_id FROM user_achievements WHERE user_id = ?').all(req.userId!) as any[];
 
   // Monthly reading stats (books marked as 'read' per month)
   const monthlyReading = db.prepare(`
@@ -107,6 +110,8 @@ userRouter.get('/stats', authMiddleware, (req: AuthRequest, res: Response) => {
     wantBooks: wantBooks.count,
     reviews: reviews.count,
     favorites: favorites.count,
+    completedFromWantList: !!user?.completed_from_want_list,
+    earnedAchievementIds: earnedRows.map((r: any) => r.achievement_id),
     monthlyReading: monthlyReading.map((m: any) => ({
       month: m.month,
       count: m.count,
@@ -114,35 +119,21 @@ userRouter.get('/stats', authMiddleware, (req: AuthRequest, res: Response) => {
   });
 });
 
-// Subjects that are too generic or not actual genres — skip them for Genre Breakdown
-const SKIP_SUBJECTS = new Set([
-  'fiction', 'nonfiction', 'non-fiction', 'literature', 'english literature',
-  'english language', 'english fiction', 'fiction in english', 'gift books',
-  'open library staff picks', 'accessible book', 'protected daisy',
-  'in library', 'internet archive wishlist', 'large type books',
-  'lending library', 'overdrive', 'ficción', 'romans, nouvelles',
-  'telephone directories',
-]);
+userRouter.post('/achievements/sync', authMiddleware, (req: AuthRequest, res: Response) => {
+  const { ids } = req.body;
+  if (!Array.isArray(ids) || ids.some((id: unknown) => typeof id !== 'number')) {
+    res.status(400).json({ error: 'ids must be an array of numbers' });
+    return;
+  }
+  const insert = db.prepare('INSERT OR IGNORE INTO user_achievements (user_id, achievement_id) VALUES (?, ?)');
+  for (const achievementId of ids) {
+    insert.run(req.userId!, achievementId);
+  }
+  res.json({ success: true });
+});
 
-/** Check if a subject looks like an actual genre rather than noise */
-function isGenreLike(subject: string): boolean {
-  const lower = subject.toLowerCase().trim();
-  // Skip if in the blocklist
-  if (SKIP_SUBJECTS.has(lower)) return false;
-  // Skip subjects that look like classification codes (e.g. "823/.912", "Pr6039...")
-  if (/^\d|^[A-Z]{1,2}\d/.test(subject.trim())) return false;
-  // Skip subjects that contain "(fictitious character)"
-  if (lower.includes('fictitious character')) return false;
-  // Skip subjects that contain "(imaginary place)"
-  if (lower.includes('imaginary place')) return false;
-  // Skip long translated library classification strings
-  if (lower.length > 60) return false;
-  return true;
-}
-
-// GET /user/genre-breakdown — real genre data from books the user read/is reading
+// GET /user/genre-breakdown — real genre data from books the user read/is reading (main + secondary only, normalized)
 userRouter.get('/genre-breakdown', authMiddleware, async (req: AuthRequest, res: Response) => {
-  // Get book keys for read + reading books
   const books = db.prepare(`
     SELECT book_key, title FROM reading_list
     WHERE user_id = ? AND status IN ('read', 'reading')
@@ -153,7 +144,6 @@ userRouter.get('/genre-breakdown', authMiddleware, async (req: AuthRequest, res:
     return;
   }
 
-  // Fetch subjects for each book from OpenLibrary
   const genreCount: Record<string, number> = {};
 
   for (const { book_key, title } of books) {
@@ -163,20 +153,13 @@ userRouter.get('/genre-breakdown', authMiddleware, async (req: AuthRequest, res:
       const data = await response.json();
       const allSubjects = (data.subjects || []) as string[];
 
-      // Filter to genre-like subjects, skip book's own title, then take first 3
-      const bookTitleLower = (title || '').toLowerCase();
-      const genreSubjects = allSubjects
-        .filter((s: string) => {
-          const trimmed = s.trim();
-          if (!trimmed) return false;
-          // Skip the book's own title as a subject
-          if (trimmed.toLowerCase() === bookTitleLower) return false;
-          return isGenreLike(trimmed);
-        })
-        .slice(0, 3);
+      const bookTitleLower = (title || '').toLowerCase().trim();
+      const withoutTitle = allSubjects.filter(
+        (s: string) => s.trim().toLowerCase() !== bookTitleLower
+      );
+      const genreSubjects = filterAndNormalizeSubjects(withoutTitle).slice(0, 3);
 
-      for (const s of genreSubjects) {
-        const genre = s.trim();
+      for (const genre of genreSubjects) {
         genreCount[genre] = (genreCount[genre] || 0) + 1;
       }
     } catch { /* skip */ }

@@ -5,6 +5,7 @@ import { Book, Heart, Sparkles, ArrowRight } from 'lucide-react';
 import { Button } from '@/shared/ui/Button';
 import { Badge } from '@/shared/ui/Badge';
 import { useAuth } from '@/features/auth/model/authContext';
+import { getAllSelectableGenres } from '@/shared/config/genreHierarchy';
 
 export function OnboardingPage() {
   const navigate = useNavigate();
@@ -14,11 +15,7 @@ export function OnboardingPage() {
   const [readingGoal, setReadingGoal] = useState(12);
   const [isLoading, setIsLoading] = useState(false);
 
-  const genres = [
-    'Literary Fiction', 'Mystery', 'Sci-Fi', 'Fantasy', 'Romance',
-    'Thriller', 'History', 'Biography', 'Poetry', 'Self-Help',
-    'Cooking', 'Art', 'Travel', 'Nature',
-  ];
+  const genres = getAllSelectableGenres();
 
   const toggleGenre = (genre: string) => {
     setSelectedGenres((prev) =>

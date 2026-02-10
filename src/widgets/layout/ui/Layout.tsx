@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { BookOpen, Home, User, Search, LogOut } from 'lucide-react';
+import { BookOpen, Home, User, Search, LogOut, Compass } from 'lucide-react';
 import { ShelfEchoLogo } from '@/shared/ui/ShelfEchoLogo';
 import { useAuth } from '@/features/auth/model/authContext';
 import { useState, type FormEvent } from 'react';
@@ -17,6 +17,7 @@ export function Layout({ children }: LayoutProps) {
 
   const navItems = [
     { icon: Home, label: 'Home', path: '/' },
+    { icon: Compass, label: 'Discover', path: '/discover' },
     { icon: BookOpen, label: 'My Books', path: '/my-books' },
     { icon: User, label: 'Profile', path: '/profile' },
   ];

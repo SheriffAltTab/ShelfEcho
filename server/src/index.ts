@@ -10,6 +10,7 @@ import { commentsRouter } from './routes/comments.js';
 import { readingListRouter } from './routes/readingList.js';
 import { userRouter } from './routes/user.js';
 import { uploadRouter } from './routes/upload.js';
+import { recommendationsRouter } from './routes/recommendations.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -31,6 +32,7 @@ app.use('/api/comments', commentsRouter);
 app.use('/api/reading-list', readingListRouter);
 app.use('/api/user', userRouter);
 app.use('/api/upload', uploadRouter);
+app.use('/api/recommendations', recommendationsRouter);
 
 app.listen(PORT, () => {
   console.log(`ShelfEcho server running on http://localhost:${PORT}`);

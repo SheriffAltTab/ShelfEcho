@@ -63,6 +63,24 @@ export function initDB() {
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
       UNIQUE(user_id, book_key)
     );
+
+    CREATE TABLE IF NOT EXISTS not_interested (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      book_key TEXT NOT NULL,
+      title TEXT NOT NULL,
+      author TEXT NOT NULL,
+      cover_id INTEGER,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      UNIQUE(user_id, book_key)
+    );
+
+    CREATE TABLE IF NOT EXISTS subjects_cache (
+      book_key TEXT PRIMARY KEY,
+      subjects TEXT NOT NULL DEFAULT '[]',
+      cached_at TEXT DEFAULT (datetime('now'))
+    );
   `);
 
   // Migrations for existing DBs
@@ -74,6 +92,21 @@ export function initDB() {
   if (!colNames.includes('pages_read')) {
     db.exec('ALTER TABLE reading_list ADD COLUMN pages_read INTEGER DEFAULT 0');
   }
+
+  const userCols = db.prepare("PRAGMA table_info(users)").all() as any[];
+  const userColNames = userCols.map((c: any) => c.name);
+  if (!userColNames.includes('completed_from_want_list')) {
+    db.exec('ALTER TABLE users ADD COLUMN completed_from_want_list INTEGER DEFAULT 0');
+  }
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS user_achievements (
+      user_id INTEGER NOT NULL,
+      achievement_id INTEGER NOT NULL,
+      PRIMARY KEY (user_id, achievement_id),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+  `);
 }
 
 export default db;

@@ -8,6 +8,7 @@ import { BookDetailsPage } from '@/pages/book-details/ui/BookDetailsPage';
 import { MyBooksPage } from '@/pages/my-books/ui/MyBooksPage';
 import { ProfilePage } from '@/pages/profile/ui/ProfilePage';
 import { SearchPage } from '@/pages/search/ui/SearchPage';
+import { DiscoverPage } from '@/pages/discover/ui/DiscoverPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -106,6 +107,16 @@ export function AppRouter() {
             <ProtectedRoute>
               <Layout>
                 <BookDetailsPage />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/discover"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <DiscoverPage />
               </Layout>
             </ProtectedRoute>
           }
