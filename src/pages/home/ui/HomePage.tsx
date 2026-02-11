@@ -36,8 +36,12 @@ export function HomePage() {
       getTrendingBooks(),
       getReadingList('reading'),
     ]).then(([trending, reading]) => {
-      if (trending.status === 'fulfilled') setTrendingBooks(trending.value.books.slice(0, 8));
-      setTrendingLoaded(true);
+      if (trending.status === 'fulfilled') {
+        setTrendingBooks(trending.value.books.slice(0, 8));
+        setTrendingLoaded(true);
+      } else {
+        setTrendingLoaded(true);
+      }
       if (reading.status === 'fulfilled') setCurrentlyReading(reading.value.books.slice(0, 3));
     });
   }, []);
