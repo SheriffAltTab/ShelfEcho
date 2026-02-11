@@ -23,7 +23,7 @@ readingListRouter.get('/', (req: AuthRequest, res: Response) => {
 });
 
 readingListRouter.post('/', (req: AuthRequest, res: Response) => {
-  const { bookKey, title, author, coverId, status = 'want' } = req.body;
+  const { bookKey, title, author, coverId, status = 'want', subjects } = req.body;
 
   if (!bookKey || !title) {
     res.status(400).json({ error: 'bookKey and title are required' });
@@ -31,8 +31,8 @@ readingListRouter.post('/', (req: AuthRequest, res: Response) => {
   }
 
   try {
-    db.prepare('INSERT INTO reading_list (user_id, book_key, title, author, cover_id, status) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(req.userId!, bookKey, title, author || '', coverId || null, status);
+    db.prepare('INSERT INTO reading_list (user_id, book_key, title, author, cover_id, status, subjects) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(req.userId!, bookKey, title, author || '', coverId || null, status, JSON.stringify(subjects || []));
     res.status(201).json({ success: true });
   } catch (err: any) {
     if (err.message?.includes('UNIQUE constraint')) {

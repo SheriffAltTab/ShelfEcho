@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { Grid, List, Plus, Search, BookOpen } from 'lucide-react';
+import { Grid, List, Plus, Search, BookOpen, SlidersHorizontal, X } from 'lucide-react';
 import { BookCard } from '@/shared/ui/BookCard';
 import { Button } from '@/shared/ui/Button';
 import { getReadingList } from '@/shared/lib/readingListApi';
@@ -12,6 +12,7 @@ import { bookPath } from '@/shared/lib/bookKeys';
 
 type ViewMode = 'grid' | 'list';
 type ShelfFilter = 'all' | 'reading' | 'want' | 'read' | 'favorites';
+type SortOption = 'date' | 'rating_desc';
 
 export function MyBooksPage() {
   const navigate = useNavigate();
@@ -21,6 +22,9 @@ export function MyBooksPage() {
   const [readingListBooks, setReadingListBooks] = useState<ReadingListItem[]>([]);
   const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [sortBy, setSortBy] = useState<SortOption>('date');
+  const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
+  const [showGenreFilter, setShowGenreFilter] = useState(false);
 
   useEffect(() => {
     async function loadData() {
@@ -54,6 +58,39 @@ export function MyBooksPage() {
     return items.filter((b) => b.title.toLowerCase().includes(q) || b.author.toLowerCase().includes(q));
   };
 
+  // Collect available genres
+  const availableGenres = useMemo(() => {
+    const genreSet = new Set<string>();
+    readingListBooks.forEach((b) => {
+      try {
+        const subs: string[] = JSON.parse(b.subjects || '[]');
+        subs.forEach((s) => genreSet.add(s));
+      } catch { /* ignore */ }
+    });
+    return [...genreSet].sort();
+  }, [readingListBooks]);
+
+  const toggleGenre = (g: string) => {
+    setSelectedGenres((prev) => prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]);
+  };
+
+  const filterByGenre = <T extends { subjects?: string }>(items: T[]) => {
+    if (selectedGenres.length === 0) return items;
+    return items.filter((b) => {
+      try {
+        const subs: string[] = JSON.parse((b as any).subjects || '[]');
+        return subs.some((s) => selectedGenres.includes(s));
+      } catch { return false; }
+    });
+  };
+
+  const sortItems = <T extends { rating?: number; created_at: string }>(items: T[]) => {
+    if (sortBy === 'rating_desc') {
+      return [...items].sort((a, b) => ((b as any).rating || 0) - ((a as any).rating || 0));
+    }
+    return items; // default: date (already sorted by server)
+  };
+
   // Get filtered items based on active shelf
   const getFilteredReadingItems = (): ReadingListItem[] => {
     let items: ReadingListItem[];
@@ -64,7 +101,7 @@ export function MyBooksPage() {
       case 'favorites': return []; // Handled separately
       default: items = readingListBooks;
     }
-    return filterBySearch(items);
+    return sortItems(filterByGenre(filterBySearch(items)));
   };
 
   const getFilteredFavorites = (): FavoriteItem[] => {
@@ -162,6 +199,41 @@ export function MyBooksPage() {
           </Button>
         </div>
       </div>
+
+      <div className="flex items-center gap-2">
+        <select value={sortBy} onChange={(e) => setSortBy(e.target.value as SortOption)}
+          className="bg-cream border border-brown/10 rounded-xl py-2 px-3 text-sm text-brown focus:outline-none focus:ring-2 focus:ring-amber/50">
+          <option value="date">Date Added</option>
+          <option value="rating_desc">Rating (high to low)</option>
+        </select>
+        {availableGenres.length > 0 && (
+          <button onClick={() => setShowGenreFilter((v) => !v)}
+            className={`p-2 rounded-xl border transition-colors ${showGenreFilter ? 'bg-amber/10 border-amber/30 text-amber-800' : 'bg-cream border-brown/10 text-brown/60 hover:text-brown'}`}>
+            <SlidersHorizontal size={18} />
+          </button>
+        )}
+        {selectedGenres.length > 0 && (
+          <button onClick={() => setSelectedGenres([])} className="text-xs text-amber-700 hover:underline flex items-center gap-1">
+            <X size={12} /> Clear filters
+          </button>
+        )}
+      </div>
+
+      {showGenreFilter && availableGenres.length > 0 && (
+        <div className="bg-cream rounded-2xl p-4 border border-brown/10">
+          <span className="text-sm font-bold text-brown mb-2 block">Filter by Genre</span>
+          <div className="flex flex-wrap gap-2">
+            {availableGenres.map((g) => (
+              <button key={g} onClick={() => toggleGenre(g)}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                  selectedGenres.includes(g) ? 'bg-amber text-white' : 'bg-white text-brown/70 border border-brown/10 hover:bg-brown/5'
+                }`}>
+                {g}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="flex gap-2 overflow-x-auto pb-2">
         {shelves.map((shelf) => (

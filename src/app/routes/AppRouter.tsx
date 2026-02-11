@@ -9,6 +9,9 @@ import { MyBooksPage } from '@/pages/my-books/ui/MyBooksPage';
 import { ProfilePage } from '@/pages/profile/ui/ProfilePage';
 import { SearchPage } from '@/pages/search/ui/SearchPage';
 import { DiscoverPage } from '@/pages/discover/ui/DiscoverPage';
+import { AuthorPage } from '@/pages/author/ui/AuthorPage';
+import { UserProfilePage } from '@/pages/user-profile/ui/UserProfilePage';
+import { AdminPage } from '@/pages/admin/ui/AdminPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -147,6 +150,36 @@ export function AppRouter() {
             <ProtectedRoute>
               <Layout>
                 <SearchPage />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/author/*"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <AuthorPage />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/user/:id"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <UserProfilePage />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <AdminPage />
               </Layout>
             </ProtectedRoute>
           }

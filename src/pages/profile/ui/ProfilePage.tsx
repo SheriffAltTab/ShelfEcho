@@ -7,7 +7,7 @@ import {
 } from 'recharts';
 import {
   Book, Settings, Edit2, Target, TrendingUp, LogOut, Award,
-  X, Plus, Check, Camera, Upload, Lock, Mail, ChevronDown, ChevronRight,
+  X, Plus, Check, Camera, Upload, Lock, Mail, ChevronDown, ChevronRight, Shield,
 } from 'lucide-react';
 import { Button } from '@/shared/ui/Button';
 import { Badge } from '@/shared/ui/Badge';
@@ -345,7 +345,16 @@ export function ProfilePage() {
           </div>
 
           <div className="text-center md:text-left flex-1">
-            <h1 className="text-3xl font-serif font-bold text-brown mb-2">{user?.name}</h1>
+            <div className="flex items-center gap-3 justify-center md:justify-start mb-1">
+              <h1 className="text-3xl font-serif font-bold text-brown">{user?.name}</h1>
+              {user?.role && user.role !== 'user' && (
+                <span className="inline-flex items-center gap-1 bg-amber/15 text-amber-800 px-2.5 py-0.5 rounded-full text-xs font-bold">
+                  <Shield size={13} />
+                  {user.role === 'superadmin' ? 'Admin' : user.role === 'moderator' ? 'Moderator' : 'Manager'}
+                </span>
+              )}
+            </div>
+            <p className="text-brown/40 text-sm mb-2 font-mono">ID: #{user?.id}</p>
             <p className="text-brown/60 mb-4">{user?.email}</p>
             <p className="text-sm text-brown/50 mb-6">
               Member since {user?.createdAt ? new Date(user.createdAt).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : 'recently'}

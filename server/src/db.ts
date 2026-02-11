@@ -98,6 +98,29 @@ export function initDB() {
   if (!userColNames.includes('completed_from_want_list')) {
     db.exec('ALTER TABLE users ADD COLUMN completed_from_want_list INTEGER DEFAULT 0');
   }
+  if (!userColNames.includes('role')) {
+    db.exec("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user'");
+  }
+  if (!userColNames.includes('blocked')) {
+    db.exec('ALTER TABLE users ADD COLUMN blocked INTEGER DEFAULT 0');
+  }
+
+  // Comments migrations
+  const commentCols = db.prepare("PRAGMA table_info(comments)").all() as any[];
+  const commentColNames = commentCols.map((c: any) => c.name);
+  if (!commentColNames.includes('has_spoiler')) {
+    db.exec('ALTER TABLE comments ADD COLUMN has_spoiler INTEGER DEFAULT 0');
+  }
+  if (!commentColNames.includes('status')) {
+    db.exec("ALTER TABLE comments ADD COLUMN status TEXT DEFAULT 'approved'");
+  }
+
+  // Reading list: subjects column
+  const rlCols = db.prepare("PRAGMA table_info(reading_list)").all() as any[];
+  const rlColNames = rlCols.map((c: any) => c.name);
+  if (!rlColNames.includes('subjects')) {
+    db.exec("ALTER TABLE reading_list ADD COLUMN subjects TEXT DEFAULT '[]'");
+  }
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS user_achievements (
@@ -107,6 +130,54 @@ export function initDB() {
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     )
   `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS comment_reports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      comment_id INTEGER NOT NULL,
+      reason TEXT NOT NULL CHECK(reason IN ('spam', 'spoiler', 'offensive', 'other')),
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (comment_id) REFERENCES comments(id) ON DELETE CASCADE,
+      UNIQUE(user_id, comment_id)
+    )
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS search_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER,
+      query TEXT NOT NULL,
+      results_count INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    )
+  `);
+
+  // Seed default recommendation weights if not present
+  const recWeights = db.prepare("SELECT key FROM settings WHERE key = 'rec_weights'").get();
+  if (!recWeights) {
+    db.prepare("INSERT INTO settings (key, value) VALUES (?, ?)").run(
+      'rec_weights',
+      JSON.stringify({ genre_weight: 50, author_weight: 50, subject_weight: 50, collaborative_weight: 50 })
+    );
+  }
+
+  // Make first user superadmin if no superadmin exists
+  const hasSuperAdmin = db.prepare("SELECT id FROM users WHERE role = 'superadmin' LIMIT 1").get();
+  if (!hasSuperAdmin) {
+    const firstUser = db.prepare("SELECT id FROM users ORDER BY id ASC LIMIT 1").get() as any;
+    if (firstUser) {
+      db.prepare("UPDATE users SET role = 'superadmin' WHERE id = ?").run(firstUser.id);
+    }
+  }
 }
 
 export default db;

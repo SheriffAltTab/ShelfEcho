@@ -78,6 +78,7 @@ userRouter.put('/profile', authMiddleware, (req: AuthRequest, res: Response) => 
       favoriteGenres: JSON.parse(user.favorite_genres || '[]'),
       readingGoal: user.reading_goal,
       createdAt: user.created_at,
+      role: user.role || 'user',
     },
   });
 });
@@ -130,6 +131,44 @@ userRouter.post('/achievements/sync', authMiddleware, (req: AuthRequest, res: Re
     insert.run(req.userId!, achievementId);
   }
   res.json({ success: true });
+});
+
+// GET /user/:id/profile — public user profile
+userRouter.get('/:id/profile', authMiddleware, (req: AuthRequest, res: Response) => {
+  const targetId = parseInt(req.params.id as string, 10);
+  if (isNaN(targetId)) { res.status(400).json({ error: 'Invalid user id' }); return; }
+
+  const user = db.prepare('SELECT id, name, avatar, favorite_genres, reading_goal, created_at, role FROM users WHERE id = ?').get(targetId) as any;
+  if (!user) { res.status(404).json({ error: 'User not found' }); return; }
+
+  const totalBooks = db.prepare('SELECT COUNT(*) as count FROM reading_list WHERE user_id = ?').get(targetId) as any;
+  const readBooks = db.prepare("SELECT COUNT(*) as count FROM reading_list WHERE user_id = ? AND status = 'read'").get(targetId) as any;
+  const readingBooks = db.prepare("SELECT COUNT(*) as count FROM reading_list WHERE user_id = ? AND status = 'reading'").get(targetId) as any;
+  const wantBooks = db.prepare("SELECT COUNT(*) as count FROM reading_list WHERE user_id = ? AND status = 'want'").get(targetId) as any;
+  const reviews = db.prepare('SELECT COUNT(*) as count FROM comments WHERE user_id = ?').get(targetId) as any;
+  const favorites = db.prepare('SELECT COUNT(*) as count FROM favorites WHERE user_id = ?').get(targetId) as any;
+  const earnedRows = db.prepare('SELECT achievement_id FROM user_achievements WHERE user_id = ?').all(targetId) as any[];
+
+  res.json({
+    user: {
+      id: user.id,
+      name: user.name,
+      avatar: user.avatar,
+      favoriteGenres: JSON.parse(user.favorite_genres || '[]'),
+      readingGoal: user.reading_goal,
+      createdAt: user.created_at,
+      role: user.role || 'user',
+    },
+    stats: {
+      totalBooks: totalBooks.count,
+      readBooks: readBooks.count,
+      readingBooks: readingBooks.count,
+      wantBooks: wantBooks.count,
+      reviews: reviews.count,
+      favorites: favorites.count,
+    },
+    earnedAchievementIds: earnedRows.map((r: any) => r.achievement_id),
+  });
 });
 
 // GET /user/genre-breakdown — real genre data from books the user read/is reading (main + secondary only, normalized)

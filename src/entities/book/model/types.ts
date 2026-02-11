@@ -3,6 +3,7 @@ export interface Book {
   title: string;
   author: string;
   authors?: string[];
+  authorKey?: string | null;
   coverId?: number | null;
   firstPublishYear?: number;
   subjects?: string[];
@@ -15,6 +16,7 @@ export interface BookDetails {
   key: string;
   title: string;
   author: string;
+  authorKey?: string;
   description: string;
   subjects: string[];
   coverId?: number | null;
@@ -35,6 +37,7 @@ export interface ReadingListItem {
   total_pages: number;
   pages_read: number;
   rating: number;
+  subjects?: string;
   created_at: string;
 }
 

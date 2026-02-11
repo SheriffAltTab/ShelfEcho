@@ -39,6 +39,7 @@ authRouter.post('/register', (req, res) => {
       avatar: '',
       favoriteGenres: [],
       readingGoal: 12,
+      role: 'user',
     },
   });
 });
@@ -63,6 +64,11 @@ authRouter.post('/login', (req, res) => {
     return;
   }
 
+  if (user.blocked) {
+    res.status(403).json({ error: 'Account is blocked' });
+    return;
+  }
+
   const token = generateToken(user.id);
 
   res.json({
@@ -75,6 +81,7 @@ authRouter.post('/login', (req, res) => {
       avatar: user.avatar,
       favoriteGenres: JSON.parse(user.favorite_genres || '[]'),
       readingGoal: user.reading_goal,
+      role: user.role || 'user',
     },
   });
 });
@@ -96,6 +103,7 @@ authRouter.get('/me', authMiddleware, (req: AuthRequest, res: Response) => {
       favoriteGenres: JSON.parse(user.favorite_genres || '[]'),
       readingGoal: user.reading_goal,
       createdAt: user.created_at,
+      role: user.role || 'user',
     },
   });
 });

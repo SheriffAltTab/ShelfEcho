@@ -1,8 +1,10 @@
 import apiClient from '@/shared/api/apiClient';
 import type { Book, BookDetails } from '../model/types';
 
-export async function searchBooks(query: string, page = 1): Promise<{ total: number; books: Book[] }> {
-  const { data } = await apiClient.get('/books/search', { params: { q: query, page, limit: 20 } });
+export async function searchBooks(query: string, page = 1, sort?: string): Promise<{ total: number; books: Book[] }> {
+  const params: Record<string, any> = { q: query, page, limit: 20 };
+  if (sort) params.sort = sort;
+  const { data } = await apiClient.get('/books/search', { params });
   return data;
 }
 

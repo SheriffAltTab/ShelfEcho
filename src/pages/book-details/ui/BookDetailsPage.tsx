@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Star, Heart, BookOpen, Share2, ArrowLeft, Send, Edit2, Trash2 } from 'lucide-react';
+import { Star, Heart, BookOpen, Share2, ArrowLeft, Send, Edit2, Trash2, Flag, Shield, EyeOff, Eye } from 'lucide-react';
 import { Button } from '@/shared/ui/Button';
 import { Badge } from '@/shared/ui/Badge';
 import { BookCard } from '@/shared/ui/BookCard';
@@ -11,7 +11,7 @@ import type { Book } from '@/entities/book/model/types';
 import { getBookCoverUrl, getBookColor } from '@/shared/config';
 import { addFavorite, removeFavorite, checkFavorite } from '@/features/favorites/api/favoritesApi';
 import { addToReadingList, checkReadingList, updateReadingItem } from '@/shared/lib/readingListApi';
-import { getComments, addComment, editComment, deleteComment, type Comment } from '@/features/comments/api/commentsApi';
+import { getComments, addComment, editComment, deleteComment, reportComment, type Comment } from '@/features/comments/api/commentsApi';
 import { bookPath } from '@/shared/lib/bookKeys';
 import { useAuth } from '@/features/auth/model/authContext';
 import { BookDescription } from '@/shared/ui/BookDescription';
@@ -28,6 +28,7 @@ export function BookDetailsPage() {
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState('');
   const [newRating, setNewRating] = useState(5);
+  const [newSpoiler, setNewSpoiler] = useState(false);
   const [submittingComment, setSubmittingComment] = useState(false);
   const [similarBooks, setSimilarBooks] = useState<Book[]>([]);
   const [actionLoading, setActionLoading] = useState('');
@@ -42,27 +43,31 @@ export function BookDetailsPage() {
   const [editingReview, setEditingReview] = useState<Comment | null>(null);
   const [editText, setEditText] = useState('');
   const [editRating, setEditRating] = useState(5);
+  const [editSpoiler, setEditSpoiler] = useState(false);
+
+  // Report modal
+  const [reportingId, setReportingId] = useState<number | null>(null);
+  const [reportReason, setReportReason] = useState('');
+  const [reportSubmitting, setReportSubmitting] = useState(false);
+
+  // Spoiler reveals
+  const [revealedSpoilers, setRevealedSpoilers] = useState<Set<number>>(new Set());
 
   const workId = location.pathname.replace(/^\/book\//, '');
-
-  // Check if current user already has a review
   const userReview = comments.find((c) => c.user_id === user?.id);
 
   useEffect(() => {
     if (!workId) return;
-
     async function loadData() {
       setIsLoading(true);
       try {
         const details = await getBookDetails(workId);
         setBook(details);
-
         const [favCheck, rlCheck, commentsRes] = await Promise.allSettled([
           checkFavorite(workId),
           checkReadingList(workId),
           getComments(workId),
         ]);
-
         if (favCheck.status === 'fulfilled') setIsFavorite(favCheck.value);
         if (rlCheck.status === 'fulfilled') {
           setInReadingList(rlCheck.value.inList);
@@ -71,7 +76,6 @@ export function BookDetailsPage() {
           if (rlCheck.value.pagesRead) setPagesRead(rlCheck.value.pagesRead);
         }
         if (commentsRes.status === 'fulfilled') setComments(commentsRes.value.comments);
-
         if (details.subjects?.length > 0) {
           try {
             const subject = details.subjects[0].toLowerCase().replace(/\s+/g, '_');
@@ -92,13 +96,8 @@ export function BookDetailsPage() {
     if (!book) return;
     setActionLoading('fav');
     try {
-      if (isFavorite) {
-        await removeFavorite(workId);
-        setIsFavorite(false);
-      } else {
-        await addFavorite(workId, book.title, book.author, book.coverId);
-        setIsFavorite(true);
-      }
+      if (isFavorite) { await removeFavorite(workId); setIsFavorite(false); }
+      else { await addFavorite(workId, book.title, book.author, book.coverId); setIsFavorite(true); }
     } catch { /* ignore */ }
     setActionLoading('');
   };
@@ -107,11 +106,8 @@ export function BookDetailsPage() {
     if (!book) return;
     setActionLoading(status);
     try {
-      if (inReadingList) {
-        await updateReadingItem(workId, { status });
-      } else {
-        await addToReadingList(workId, book.title, book.author, book.coverId, status);
-      }
+      if (inReadingList) { await updateReadingItem(workId, { status }); }
+      else { await addToReadingList(workId, book.title, book.author, book.coverId, status); }
       setInReadingList(true);
       setReadingStatus(status);
     } catch { /* ignore */ }
@@ -123,20 +119,14 @@ export function BookDetailsPage() {
     try {
       const { removeFromReadingList } = await import('@/shared/lib/readingListApi');
       await removeFromReadingList(workId);
-      setInReadingList(false);
-      setReadingStatus(null);
-      setTotalPages(0);
-      setPagesRead(0);
+      setInReadingList(false); setReadingStatus(null); setTotalPages(0); setPagesRead(0);
     } catch { /* ignore */ }
     setActionLoading('');
   };
 
   const handleSaveProgress = async () => {
     setProgressSaving(true);
-    try {
-      await updateReadingItem(workId, { totalPages, pagesRead });
-      setShowProgress(false);
-    } catch { /* ignore */ }
+    try { await updateReadingItem(workId, { totalPages, pagesRead }); setShowProgress(false); } catch { /* ignore */ }
     setProgressSaving(false);
   };
 
@@ -147,38 +137,41 @@ export function BookDetailsPage() {
     if (!newComment.trim()) return;
     setSubmittingComment(true);
     try {
-      const { comment, updated } = await addComment(workId, newComment.trim(), newRating);
-      if (updated) {
-        setComments((prev) => prev.map((c) => c.user_id === user?.id ? comment : c));
-      } else {
-        setComments([comment, ...comments]);
-      }
-      setNewComment('');
-      setNewRating(5);
+      const { comment, updated } = await addComment(workId, newComment.trim(), newRating, newSpoiler);
+      if (updated) { setComments((prev) => prev.map((c) => c.user_id === user?.id ? comment : c)); }
+      else { setComments([comment, ...comments]); }
+      setNewComment(''); setNewRating(5); setNewSpoiler(false);
     } catch { /* ignore */ }
     setSubmittingComment(false);
   };
 
   const handleStartEdit = (review: Comment) => {
-    setEditingReview(review);
-    setEditText(review.text);
-    setEditRating(review.rating);
+    setEditingReview(review); setEditText(review.text); setEditRating(review.rating); setEditSpoiler(review.has_spoiler);
   };
 
   const handleSaveEdit = async () => {
     if (!editingReview) return;
     try {
-      const { comment } = await editComment(editingReview.id, editText, editRating);
+      const { comment } = await editComment(editingReview.id, editText, editRating, editSpoiler);
       setComments((prev) => prev.map((c) => c.id === editingReview.id ? comment : c));
       setEditingReview(null);
     } catch { /* ignore */ }
   };
 
   const handleDeleteReview = async (id: number) => {
-    try {
-      await deleteComment(id);
-      setComments((prev) => prev.filter((c) => c.id !== id));
-    } catch { /* ignore */ }
+    try { await deleteComment(id); setComments((prev) => prev.filter((c) => c.id !== id)); } catch { /* ignore */ }
+  };
+
+  const handleReport = async () => {
+    if (!reportingId || !reportReason) return;
+    setReportSubmitting(true);
+    try { await reportComment(reportingId, reportReason); setReportingId(null); setReportReason(''); }
+    catch { /* ignore */ }
+    setReportSubmitting(false);
+  };
+
+  const toggleSpoiler = (id: number) => {
+    setRevealedSpoilers((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   };
 
   if (isLoading) {
@@ -202,10 +195,7 @@ export function BookDetailsPage() {
 
   return (
     <div className="max-w-5xl mx-auto">
-      <button
-        onClick={() => navigate(-1)}
-        className="flex items-center gap-2 text-brown/60 hover:text-brown mb-6 transition-colors"
-      >
+      <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-brown/60 hover:text-brown mb-6 transition-colors">
         <ArrowLeft size={18} /> Back
       </button>
 
@@ -233,34 +223,21 @@ export function BookDetailsPage() {
             </div>
           </div>
 
-          {/* Status selector */}
           <div className="w-full max-w-xs space-y-3">
             <div className="flex gap-2">
               {(['reading', 'want', 'read'] as const).map((status) => {
                 const labels = { reading: 'Reading', want: 'Want to Read', read: 'Completed' };
                 const isActive = readingStatus === status;
                 return (
-                  <Button
-                    key={status}
-                    variant={isActive ? 'wood' : 'outline'}
-                    size="sm"
-                    className="flex-1 text-xs"
-                    onClick={() => handleChangeStatus(status)}
-                    isLoading={actionLoading === status}
-                  >
+                  <Button key={status} variant={isActive ? 'wood' : 'outline'} size="sm" className="flex-1 text-xs"
+                    onClick={() => handleChangeStatus(status)} isLoading={actionLoading === status}>
                     {labels[status]}
                   </Button>
                 );
               })}
             </div>
-
             <div className="flex gap-2">
-              <Button
-                variant="outline"
-                className="flex-1 px-3"
-                onClick={handleToggleFavorite}
-                isLoading={actionLoading === 'fav'}
-              >
+              <Button variant="outline" className="flex-1 px-3" onClick={handleToggleFavorite} isLoading={actionLoading === 'fav'}>
                 <Heart size={18} className={isFavorite ? 'fill-rose text-rose' : ''} />
                 <span className="ml-2 text-sm">{isFavorite ? 'Liked' : 'Like'}</span>
               </Button>
@@ -268,59 +245,37 @@ export function BookDetailsPage() {
                 <Share2 size={18} />
               </Button>
             </div>
-
             {inReadingList && (
-              <button
-                onClick={handleRemoveFromShelf}
-                className="w-full text-xs text-brown/40 hover:text-rose transition-colors py-1"
-              >
+              <button onClick={handleRemoveFromShelf} className="w-full text-xs text-brown/40 hover:text-rose transition-colors py-1">
                 Remove from shelf
               </button>
             )}
 
-            {/* Reading progress for "currently reading" */}
             {readingStatus === 'reading' && (
               <div className="bg-cream rounded-xl p-4 border border-brown/10">
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-sm font-medium text-brown">Progress</span>
-                  {totalPages > 0 && (
-                    <span className="text-sm font-bold text-amber-700">{progressPercent}%</span>
-                  )}
+                  {totalPages > 0 && <span className="text-sm font-bold text-amber-700">{progressPercent}%</span>}
                 </div>
-
                 {totalPages > 0 && (
                   <div className="w-full bg-brown/10 rounded-full h-2 mb-3">
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{ width: `${progressPercent}%` }}
-                      className="bg-amber h-2 rounded-full"
-                    />
+                    <motion.div initial={{ width: 0 }} animate={{ width: `${progressPercent}%` }} className="bg-amber h-2 rounded-full" />
                   </div>
                 )}
-
                 {showProgress ? (
                   <div className="space-y-2">
                     <div className="flex gap-2">
                       <div className="flex-1">
                         <label className="text-xs text-brown/50">Pages read</label>
-                        <input
-                          type="number"
-                          min="0"
-                          max={totalPages || 99999}
-                          value={pagesRead || ''}
+                        <input type="number" min="0" max={totalPages || 99999} value={pagesRead || ''}
                           onChange={(e) => setPagesRead(Math.max(0, parseInt(e.target.value) || 0))}
-                          className="w-full bg-linen border border-brown/10 rounded-lg py-1.5 px-2 text-sm text-brown"
-                        />
+                          className="w-full bg-linen border border-brown/10 rounded-lg py-1.5 px-2 text-sm text-brown" />
                       </div>
                       <div className="flex-1">
                         <label className="text-xs text-brown/50">Total pages</label>
-                        <input
-                          type="number"
-                          min="1"
-                          value={totalPages || ''}
+                        <input type="number" min="1" value={totalPages || ''}
                           onChange={(e) => setTotalPages(Math.max(0, parseInt(e.target.value) || 0))}
-                          className="w-full bg-linen border border-brown/10 rounded-lg py-1.5 px-2 text-sm text-brown"
-                        />
+                          className="w-full bg-linen border border-brown/10 rounded-lg py-1.5 px-2 text-sm text-brown" />
                       </div>
                     </div>
                     <div className="flex gap-2">
@@ -329,10 +284,7 @@ export function BookDetailsPage() {
                     </div>
                   </div>
                 ) : (
-                  <button
-                    onClick={() => setShowProgress(true)}
-                    className="text-xs text-amber-700 hover:text-amber-800 font-medium"
-                  >
+                  <button onClick={() => setShowProgress(true)} className="text-xs text-amber-700 hover:text-amber-800 font-medium">
                     {totalPages > 0 ? `${pagesRead} / ${totalPages} pages` : 'Set page progress'}
                   </button>
                 )}
@@ -345,7 +297,13 @@ export function BookDetailsPage() {
           <div>
             <h1 className="text-4xl md:text-5xl font-serif font-bold text-brown mb-2">{book.title}</h1>
             <div className="flex items-center gap-4 mb-6">
-              <span className="text-lg text-brown/80 font-medium">{book.author}</span>
+              {book.authorKey ? (
+                <Link to={`/author/${book.authorKey}`} className="text-lg text-brown/80 font-medium hover:text-amber-700 hover:underline transition-colors">
+                  {book.author}
+                </Link>
+              ) : (
+                <span className="text-lg text-brown/80 font-medium">{book.author}</span>
+              )}
               {book.ratingsAverage > 0 && (
                 <>
                   <span className="text-brown/30">&bull;</span>
@@ -361,17 +319,13 @@ export function BookDetailsPage() {
             {book.subjects.length > 0 && (
               <div className="flex flex-wrap gap-2 mb-8">
                 {book.subjects.map((tag, i) => (
-                  <Badge key={tag} variant={i % 3 === 0 ? 'amber' : i % 3 === 1 ? 'rose' : 'teal'}>
-                    {tag}
-                  </Badge>
+                  <Badge key={tag} variant={i % 3 === 0 ? 'amber' : i % 3 === 1 ? 'rose' : 'teal'}>{tag}</Badge>
                 ))}
               </div>
             )}
 
             {book.description && (
-              <div className="mb-8 text-lg">
-                <BookDescription text={book.description} />
-              </div>
+              <div className="mb-8 text-lg"><BookDescription text={book.description} /></div>
             )}
 
             <div className="grid grid-cols-2 gap-4 border-y border-brown/10 py-6">
@@ -394,27 +348,29 @@ export function BookDetailsPage() {
           <div>
             <h3 className="text-2xl font-serif font-bold text-brown mb-6">Reader Notes</h3>
 
-            {/* Show form only if user hasn't reviewed yet */}
             {!userReview ? (
               <form onSubmit={handleSubmitComment} className="mb-6 bg-cream p-4 rounded-2xl border border-brown/10">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-sm font-medium text-brown">Your rating:</span>
-                  <div className="flex gap-1">
-                    {[1, 2, 3, 4, 5].map((star) => (
-                      <button key={star} type="button" onClick={() => setNewRating(star)} className="focus:outline-none">
-                        <Star size={18} className={star <= newRating ? 'fill-amber-400 text-amber-400' : 'text-gray-300'} />
-                      </button>
-                    ))}
+                <div className="flex items-center gap-4 mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-brown">Your rating:</span>
+                    <div className="flex gap-1">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <button key={star} type="button" onClick={() => setNewRating(star)} className="focus:outline-none">
+                          <Star size={18} className={star <= newRating ? 'fill-amber-400 text-amber-400' : 'text-gray-300'} />
+                        </button>
+                      ))}
+                    </div>
                   </div>
+                  <label className="flex items-center gap-1.5 cursor-pointer text-sm text-brown/60 hover:text-brown transition-colors">
+                    <input type="checkbox" checked={newSpoiler} onChange={(e) => setNewSpoiler(e.target.checked)}
+                      className="rounded border-brown/20 text-amber focus:ring-amber/50" />
+                    <EyeOff size={14} /> Spoiler
+                  </label>
                 </div>
                 <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newComment}
-                    onChange={(e) => setNewComment(e.target.value)}
+                  <input type="text" value={newComment} onChange={(e) => setNewComment(e.target.value)}
                     placeholder="Share your thoughts about this book..."
-                    className="flex-1 bg-linen border border-brown/10 rounded-xl py-2 px-4 text-brown placeholder:text-brown/40 focus:outline-none focus:ring-2 focus:ring-amber/50"
-                  />
+                    className="flex-1 bg-linen border border-brown/10 rounded-xl py-2 px-4 text-brown placeholder:text-brown/40 focus:outline-none focus:ring-2 focus:ring-amber/50" />
                   <Button type="submit" variant="wood" isLoading={submittingComment} disabled={!newComment.trim()}>
                     <Send size={16} />
                   </Button>
@@ -425,14 +381,14 @@ export function BookDetailsPage() {
             )}
 
             {comments.length === 0 ? (
-              <p className="text-brown/50 text-center py-6 font-serif italic">
-                No reviews yet. Be the first to share your thoughts!
-              </p>
+              <p className="text-brown/50 text-center py-6 font-serif italic">No reviews yet. Be the first to share your thoughts!</p>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {comments.map((review, i) => {
                   const isOwn = review.user_id === user?.id;
                   const isEditing = editingReview?.id === review.id;
+                  const isSpoilerHidden = review.has_spoiler && !revealedSpoilers.has(review.id);
+                  const isAdminUser = review.user_role && review.user_role !== 'user';
 
                   return (
                     <motion.div
@@ -443,19 +399,22 @@ export function BookDetailsPage() {
                     >
                       {isEditing ? (
                         <div className="space-y-3">
-                          <div className="flex gap-1">
-                            {[1, 2, 3, 4, 5].map((star) => (
-                              <button key={star} type="button" onClick={() => setEditRating(star)} className="focus:outline-none">
-                                <Star size={14} className={star <= editRating ? 'fill-amber-400 text-amber-400' : 'text-gray-300'} />
-                              </button>
-                            ))}
+                          <div className="flex items-center gap-3">
+                            <div className="flex gap-1">
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <button key={star} type="button" onClick={() => setEditRating(star)} className="focus:outline-none">
+                                  <Star size={14} className={star <= editRating ? 'fill-amber-400 text-amber-400' : 'text-gray-300'} />
+                                </button>
+                              ))}
+                            </div>
+                            <label className="flex items-center gap-1 cursor-pointer text-xs text-brown/60">
+                              <input type="checkbox" checked={editSpoiler} onChange={(e) => setEditSpoiler(e.target.checked)}
+                                className="rounded border-brown/20 text-amber focus:ring-amber/50" />
+                              <EyeOff size={12} /> Spoiler
+                            </label>
                           </div>
-                          <textarea
-                            value={editText}
-                            onChange={(e) => setEditText(e.target.value)}
-                            className="w-full bg-linen border border-brown/10 rounded-lg py-2 px-3 text-sm text-brown focus:outline-none focus:ring-2 focus:ring-amber/50"
-                            rows={3}
-                          />
+                          <textarea value={editText} onChange={(e) => setEditText(e.target.value)}
+                            className="w-full bg-linen border border-brown/10 rounded-lg py-2 px-3 text-sm text-brown focus:outline-none focus:ring-2 focus:ring-amber/50" rows={3} />
                           <div className="flex gap-2">
                             <Button variant="ghost" size="sm" onClick={() => setEditingReview(null)}>Cancel</Button>
                             <Button variant="wood" size="sm" onClick={handleSaveEdit}>Save</Button>
@@ -464,7 +423,12 @@ export function BookDetailsPage() {
                       ) : (
                         <>
                           <div className="flex justify-between items-start mb-3">
-                            <span className="font-bold text-brown font-serif">{review.user_name}</span>
+                            <div className="flex items-center gap-1.5">
+                              <Link to={`/user/${review.user_id}`} className="font-bold text-brown font-serif hover:text-amber-700 hover:underline transition-colors">
+                                {review.user_name}
+                              </Link>
+                              {isAdminUser && <Shield size={14} className="text-amber" title="Admin" />}
+                            </div>
                             <div className="flex items-center gap-2">
                               <div className="flex">
                                 {[...Array(5)].map((_, idx) => (
@@ -481,9 +445,30 @@ export function BookDetailsPage() {
                                   </button>
                                 </div>
                               )}
+                              {!isOwn && (
+                                <button onClick={() => { setReportingId(review.id); setReportReason(''); }}
+                                  className="text-brown/30 hover:text-rose transition-colors ml-1" title="Report">
+                                  <Flag size={13} />
+                                </button>
+                              )}
                             </div>
                           </div>
-                          <p className="text-brown/70 italic font-serif leading-relaxed">"{review.text}"</p>
+                          {isSpoilerHidden ? (
+                            <button onClick={() => toggleSpoiler(review.id)}
+                              className="flex items-center gap-2 text-sm text-amber-700 bg-amber/10 rounded-lg px-3 py-2 w-full hover:bg-amber/20 transition-colors">
+                              <Eye size={16} /> This review contains spoilers. Click to reveal.
+                            </button>
+                          ) : (
+                            <>
+                              {review.has_spoiler && (
+                                <button onClick={() => toggleSpoiler(review.id)}
+                                  className="flex items-center gap-1 text-xs text-amber-700 mb-1 hover:underline">
+                                  <EyeOff size={12} /> Hide spoiler
+                                </button>
+                              )}
+                              <p className="text-brown/70 italic font-serif leading-relaxed">"{review.text}"</p>
+                            </>
+                          )}
                           <p className="text-xs text-brown/40 mt-2">
                             {new Date(review.created_at).toLocaleDateString()}
                             {isOwn && <span className="ml-2 text-amber-600 font-medium">Your review</span>}
@@ -504,17 +489,43 @@ export function BookDetailsPage() {
           <h3 className="text-2xl font-serif font-bold text-brown mb-8">Readers Also Loved</h3>
           <div className="flex gap-6 overflow-x-auto pb-8 px-2">
             {similarBooks.map((b) => (
-              <BookCard
-                key={b.key}
-                title={b.title}
-                author={b.author}
-                coverId={b.coverId}
-                coverColor={getBookColor(b.key)}
-                className="hover:-translate-y-2 transition-transform"
-                onClick={() => navigate(bookPath(b.key))}
-              />
+              <BookCard key={b.key} title={b.title} author={b.author} coverId={b.coverId}
+                coverColor={getBookColor(b.key)} className="hover:-translate-y-2 transition-transform"
+                onClick={() => navigate(bookPath(b.key))} />
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Report Modal */}
+      {reportingId !== null && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setReportingId(null)}>
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+            className="bg-cream rounded-2xl shadow-2xl w-full max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-serif font-bold text-brown mb-4">Report Review</h3>
+            <div className="space-y-2 mb-4">
+              {[
+                { value: 'spam', label: 'Spam' },
+                { value: 'spoiler', label: 'Unmarked Spoiler' },
+                { value: 'offensive', label: 'Offensive Content' },
+                { value: 'other', label: 'Other' },
+              ].map((opt) => (
+                <label key={opt.value} className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer border transition-colors ${
+                  reportReason === opt.value ? 'bg-amber/10 border-amber/30' : 'bg-white border-brown/10 hover:bg-brown/5'
+                }`}>
+                  <input type="radio" name="reportReason" value={opt.value} checked={reportReason === opt.value}
+                    onChange={() => setReportReason(opt.value)} className="text-amber focus:ring-amber" />
+                  <span className="text-sm text-brown">{opt.label}</span>
+                </label>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setReportingId(null)} className="flex-1">Cancel</Button>
+              <Button variant="wood" size="sm" onClick={handleReport} disabled={!reportReason} isLoading={reportSubmitting} className="flex-1">
+                Submit Report
+              </Button>
+            </div>
+          </motion.div>
         </div>
       )}
     </div>

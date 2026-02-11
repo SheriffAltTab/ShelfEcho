@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { BookOpen, Home, User, Search, LogOut, Compass } from 'lucide-react';
+import { BookOpen, Home, User, Search, LogOut, Compass, Shield } from 'lucide-react';
 import { ShelfEchoLogo } from '@/shared/ui/ShelfEchoLogo';
 import { useAuth } from '@/features/auth/model/authContext';
 import { useState, type FormEvent } from 'react';
@@ -15,11 +15,14 @@ export function Layout({ children }: LayoutProps) {
   const { user, logout } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
 
+  const isAdmin = user?.role && user.role !== 'user';
+
   const navItems = [
     { icon: Home, label: 'Home', path: '/' },
     { icon: Compass, label: 'Discover', path: '/discover' },
     { icon: BookOpen, label: 'My Books', path: '/my-books' },
     { icon: User, label: 'Profile', path: '/profile' },
+    ...(isAdmin ? [{ icon: Shield, label: 'Admin', path: '/admin' }] : []),
   ];
 
   const handleSearch = (e: FormEvent) => {

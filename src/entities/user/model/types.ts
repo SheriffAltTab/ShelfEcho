@@ -1,3 +1,5 @@
+export type UserRole = 'user' | 'moderator' | 'content_manager' | 'superadmin';
+
 export interface User {
   id: number;
   name: string;
@@ -7,6 +9,7 @@ export interface User {
   favoriteGenres: string[];
   readingGoal: number;
   createdAt?: string;
+  role?: UserRole;
 }
 
 export interface UserStats {
