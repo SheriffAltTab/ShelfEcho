@@ -6,14 +6,29 @@ interface AuthResponse {
   user: User;
 }
 
+function validateAuthResponse(data: unknown): AuthResponse {
+  if (
+    data &&
+    typeof data === 'object' &&
+    'token' in data &&
+    'user' in data &&
+    typeof (data as AuthResponse).token === 'string' &&
+    (data as AuthResponse).user &&
+    typeof (data as AuthResponse).user === 'object'
+  ) {
+    return data as AuthResponse;
+  }
+  throw new Error('Сервер повернув некоректну відповідь. Можливо, бекенд тимчасово недоступний.');
+}
+
 export async function login(email: string, password: string): Promise<AuthResponse> {
   const { data } = await apiClient.post('/auth/login', { email, password });
-  return data;
+  return validateAuthResponse(data);
 }
 
 export async function register(name: string, email: string, password: string): Promise<AuthResponse> {
   const { data } = await apiClient.post('/auth/register', { name, email, password });
-  return data;
+  return validateAuthResponse(data);
 }
 
 export async function getMe(): Promise<{ user: User }> {

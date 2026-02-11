@@ -35,7 +35,15 @@ export function AuthPage() {
         navigate('/');
       }
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Something went wrong');
+      const msg =
+        (err.response?.data && typeof err.response.data === 'object' && err.response.data?.error) ||
+        err.message ||
+        (err.response?.status === 404 || err.response?.status >= 500
+          ? 'Сервер недоступний. Спробуйте пізніше.'
+          : err.response?.data && typeof err.response.data === 'string'
+            ? 'Сервер повернув некоректну відповідь. Перевірте, чи працює бекенд.'
+            : 'Щось пішло не так. Спробуйте ще раз.');
+      setError(String(msg));
     } finally {
       setIsLoading(false);
     }
