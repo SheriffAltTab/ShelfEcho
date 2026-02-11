@@ -31,9 +31,29 @@ export async function register(name: string, email: string, password: string): P
   return validateAuthResponse(data);
 }
 
+function validateUser(data: unknown): User {
+  if (
+    data &&
+    typeof data === 'object' &&
+    'id' in data &&
+    'name' in data &&
+    'email' in data &&
+    typeof (data as User).id === 'number' &&
+    typeof (data as User).name === 'string' &&
+    typeof (data as User).email === 'string'
+  ) {
+    return data as User;
+  }
+  throw new Error('Invalid user response');
+}
+
 export async function getMe(): Promise<{ user: User }> {
   const { data } = await apiClient.get('/auth/me');
-  return data;
+  if (data && typeof data === 'object' && 'user' in data && (data as { user: unknown }).user) {
+    const user = validateUser((data as { user: unknown }).user);
+    return { user };
+  }
+  throw new Error('Invalid response from server');
 }
 
 export async function completeOnboarding(favoriteGenres: string[], readingGoal: number): Promise<void> {

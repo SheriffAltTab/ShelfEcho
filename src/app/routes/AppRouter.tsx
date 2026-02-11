@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from '@/features/auth/model/authContext';
+import { ErrorBoundary } from '@/shared/ui/ErrorBoundary';
 import { Layout } from '@/widgets/layout/ui/Layout';
 import { AuthPage } from '@/pages/auth/ui/AuthPage';
 import { OnboardingPage } from '@/pages/onboarding/ui/OnboardingPage';
@@ -81,9 +82,11 @@ export function AppRouter() {
         <Route
           path="/auth"
           element={
-            <AuthRoute>
-              <AuthPage />
-            </AuthRoute>
+            <ErrorBoundary>
+              <AuthRoute>
+                <AuthPage />
+              </AuthRoute>
+            </ErrorBoundary>
           }
         />
         <Route

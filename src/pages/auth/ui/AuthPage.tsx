@@ -34,16 +34,17 @@ export function AuthPage() {
         await login(formData.email, formData.password);
         navigate('/');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const ax = err && typeof err === 'object' && 'response' in err ? (err as { response?: { data?: unknown; status?: number } }) : null;
       const msg =
-        (err.response?.data && typeof err.response.data === 'object' && err.response.data?.error) ||
-        err.message ||
-        (err.response?.status === 404 || err.response?.status >= 500
+        (ax?.response?.data && typeof ax.response.data === 'object' && 'error' in ax.response.data && ax.response.data.error) ||
+        (err instanceof Error ? err.message : '') ||
+        (ax?.response?.status === 404 || (ax?.response?.status != null && ax.response.status >= 500)
           ? 'Сервер недоступний. Спробуйте пізніше.'
-          : err.response?.data && typeof err.response.data === 'string'
+          : ax?.response?.data && typeof ax.response.data === 'string'
             ? 'Сервер повернув некоректну відповідь. Перевірте, чи працює бекенд.'
             : 'Щось пішло не так. Спробуйте ще раз.');
-      setError(String(msg));
+      setError(typeof msg === 'string' && msg.trim() ? msg : 'Щось пішло не так. Спробуйте ще раз.');
     } finally {
       setIsLoading(false);
     }
@@ -115,11 +116,11 @@ export function AuthPage() {
                   </p>
                 </div>
 
-                {error && (
-                  <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-sm text-center">
+                {error ? (
+                  <div role="alert" className="mb-4 min-h-[2.5rem] p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-sm text-center flex items-center justify-center">
                     {error}
                   </div>
-                )}
+                ) : null}
 
                 <form onSubmit={handleSubmit} className="space-y-5">
                   {mode === 'signup' && (
