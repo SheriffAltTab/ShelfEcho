@@ -121,7 +121,7 @@ export function MyBooksPage() {
     );
   }
 
-  const renderListItem = (book: { book_key: string; title: string; author: string; cover_id?: number | null }, status?: string, progress?: number, totalPages?: number, pagesRead?: number) => (
+  const renderListItem = (book: { book_key: string; title: string; author: string; cover_id?: number | null }, status?: string, _progress?: number, totalPages?: number, pagesRead?: number) => (
     <motion.div
       key={book.book_key}
       whileHover={{ x: 4 }}

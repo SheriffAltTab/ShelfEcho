@@ -462,7 +462,7 @@ export function ProfilePage() {
                 <Tooltip
                   cursor={{ fill: '#FAF6F0' }}
                   contentStyle={{ backgroundColor: '#FFF', borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                  formatter={(value: number, name: string) => [value === 1 ? '1 book' : `${value} books`, name]}
+                  formatter={((v: unknown, n: unknown) => [v === 1 ? '1 book' : `${Number(v) || 0} books`, String(n ?? '')]) as never}
                 />
                 <Bar dataKey="books" radius={[4, 4, 0, 0]}>
                   {chartData.map((_entry, index) => (
@@ -504,7 +504,7 @@ export function ProfilePage() {
                       ))}
                     </Pie>
                     <Tooltip
-                      formatter={(value: number, name: string) => [value === 1 ? '1 book' : `${value} books`, name]}
+                      formatter={((v: unknown, n: unknown) => [v === 1 ? '1 book' : `${Number(v) || 0} books`, String(n ?? '')]) as never}
                       contentStyle={{ backgroundColor: '#FFF', borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
                     />
                   </PieChart>
