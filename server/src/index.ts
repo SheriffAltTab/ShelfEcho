@@ -13,10 +13,13 @@ import { uploadRouter } from './routes/upload.js';
 import { recommendationsRouter } from './routes/recommendations.js';
 import { adminRouter } from './routes/admin.js';
 
+import 'dotenv/config';
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
-const PORT = 3001;
+const PORT = Number(process.env.PORT) || 3001;
+const HOST = process.env.HOST || '0.0.0.0';
 
 app.use(cors());
 app.use(express.json());
@@ -36,6 +39,6 @@ app.use('/api/upload', uploadRouter);
 app.use('/api/recommendations', recommendationsRouter);
 app.use('/api/admin', adminRouter);
 
-app.listen(PORT, () => {
-  console.log(`ShelfEcho server running on http://localhost:${PORT}`);
+app.listen(PORT, HOST, () => {
+  console.log(`ShelfEcho server running on http://${HOST}:${PORT}`);
 });
