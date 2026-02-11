@@ -36,8 +36,11 @@ export function AuthPage() {
       }
     } catch (err: unknown) {
       const ax = err && typeof err === 'object' && 'response' in err ? (err as { response?: { data?: unknown; status?: number } }) : null;
+      const data = ax?.response?.data;
+      const backendError =
+        data && typeof data === 'object' && ('error' in data ? (data as { error?: string }).error : ('message' in data ? (data as { message?: string }).message : undefined));
       const msg =
-        (ax?.response?.data && typeof ax.response.data === 'object' && 'error' in ax.response.data && ax.response.data.error) ||
+        (typeof backendError === 'string' && backendError.trim() ? backendError : null) ||
         (err instanceof Error ? err.message : '') ||
         (ax?.response?.status === 404 || (ax?.response?.status != null && ax.response.status >= 500)
           ? 'Сервер недоступний. Спробуйте пізніше.'

@@ -21,7 +21,13 @@ const app = express();
 const PORT = Number(process.env.PORT) || 3001;
 const HOST = process.env.HOST || '0.0.0.0';
 
-app.use(cors());
+const allowedOrigins = [
+  'https://shelfecho.vercel.app',
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+];
+if (process.env.FRONTEND_URL) allowedOrigins.push(process.env.FRONTEND_URL);
+app.use(cors({ origin: (origin, cb) => cb(null, !origin || allowedOrigins.includes(origin) ? (origin || true) : false) }));
 app.use(express.json());
 
 // Serve uploaded files
