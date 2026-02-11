@@ -324,6 +324,9 @@ export function ProfilePage() {
     }
   }, [stats, genreBreakdown.length]);
 
+  const bookTooltipFormatter: (value: unknown, name: unknown) => [string, string] = (v, n) =>
+    [Number(v) === 1 ? '1 book' : `${Number(v) || 0} books`, String(n ?? '')];
+
   return (
     <div className="space-y-8">
       {/* Profile Header */}
@@ -462,7 +465,7 @@ export function ProfilePage() {
                 <Tooltip
                   cursor={{ fill: '#FAF6F0' }}
                   contentStyle={{ backgroundColor: '#FFF', borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                  formatter={((v: unknown, n: unknown) => [Number(v) === 1 ? '1 book' : `${Number(v) || 0} books`, String(n ?? '')]) as any}
+                  formatter={bookTooltipFormatter as any}
                 />
                 <Bar dataKey="books" radius={[4, 4, 0, 0]}>
                   {chartData.map((_entry, index) => (
@@ -504,7 +507,7 @@ export function ProfilePage() {
                       ))}
                     </Pie>
                     <Tooltip
-                      formatter={((v: unknown, n: unknown) => [Number(v) === 1 ? '1 book' : `${Number(v) || 0} books`, String(n ?? '')]) as any}
+                      formatter={bookTooltipFormatter as any}
                       contentStyle={{ backgroundColor: '#FFF', borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
                     />
                   </PieChart>
