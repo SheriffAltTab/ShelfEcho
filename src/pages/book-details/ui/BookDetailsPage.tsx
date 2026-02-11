@@ -427,7 +427,11 @@ export function BookDetailsPage() {
                               <Link to={`/user/${review.user_id}`} className="font-bold text-brown font-serif hover:text-amber-700 hover:underline transition-colors">
                                 {review.user_name}
                               </Link>
-                              {isAdminUser && <span title="Admin"><Shield size={14} className="text-amber" /></span>}
+                              {isAdminUser && (
+                                <span title="Admin" className="inline-flex">
+                                  <Shield size={14} className="text-amber" aria-hidden />
+                                </span>
+                              )}
                             </div>
                             <div className="flex items-center gap-2">
                               <div className="flex">
