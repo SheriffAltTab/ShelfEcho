@@ -14,14 +14,14 @@
    - **Build Command:** `npm install && npm run build`
    - **Start Command:** `npm start`
 5. **Settings** → **Networking** → **Generate Domain** — з’явиться URL типу `https://shelfecho-production-xxxx.up.railway.app`.
-6. Скопіюйте цей URL **з шляхом `/api`** (наприклад `https://shelfecho-production-xxxx.up.railway.app/api`).
+6. Скопіюйте домен сервісу (наприклад `https://shelfecho-production-xxxx.up.railway.app`).
 
 **Підключення фронту на Vercel:**
 
 - У проєкті фронту на Vercel: **Settings** → **Environment Variables**.
 - Додайте змінну:
   - **Name:** `VITE_API_URL`
-  - **Value:** `https://ваш-домен.railway.app/api` (ваш URL з кроку 6, без слеша в кінці).
+  - **Value:** `https://ваш-домен.railway.app` або `https://ваш-домен.railway.app/api` (фронт сам допише `/api`, якщо його немає; без слеша в кінці).
 - Збережіть і зробіть **Redeploy** фронту.
 
 Після цього логін і реєстрація будуть йти на бекенд на Railway.
