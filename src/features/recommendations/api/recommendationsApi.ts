@@ -19,6 +19,8 @@ export interface ContentBasedSection {
   books: RecBook[];
 }
 
+export type PrimarySignal = 'genre' | 'subject' | 'author' | 'collaborative';
+
 export interface FeaturedBook {
   key: string;
   title: string;
@@ -28,8 +30,9 @@ export interface FeaturedBook {
   subjects: string[];
   ratingsAverage: number;
   ratingsCount: number;
-  reason: string | null;
-  matchingGenres?: string[];
+  primarySignal?: PrimarySignal;
+  explanationTags?: string[];
+  hybridScore?: number;
 }
 
 export async function getContentBasedRecommendations(): Promise<{ sections: ContentBasedSection[] }> {
@@ -45,10 +48,13 @@ export async function getCollaborativeRecommendations(): Promise<{ books: RecBoo
 export async function getFeaturedRecommendations(
   page = 0,
   pageSize = 8,
+  excludeKeys: string[] = [],
 ): Promise<{ books: FeaturedBook[]; page: number; pageSize: number; hasMore: boolean }> {
-  const { data } = await apiClient.get('/recommendations/featured', {
-    params: { page, pageSize },
-  });
+  const params: Record<string, string | number> = { page, pageSize };
+  if (excludeKeys.length > 0) {
+    params.exclude = excludeKeys.join(',');
+  }
+  const { data } = await apiClient.get('/recommendations/featured', { params });
   return data;
 }
 

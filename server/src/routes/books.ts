@@ -208,8 +208,17 @@ booksRouter.get('/subject/:subject', async (req, res) => {
 });
 
 // Popular books from recent reading_list + favorites activity (last 30 days)
+const POPULAR_NOW_CACHE_TTL_MS = 90 * 1000;
+
 booksRouter.get('/popular-now', authMiddleware, (req: AuthRequest, res: Response) => {
   try {
+    const cacheKey = 'popular-now:global';
+    const cached = getCached(cacheKey);
+    if (cached) {
+      res.json(cached);
+      return;
+    }
+
     const rows = db.prepare(`
       WITH rl AS (
         SELECT book_key, title, author, cover_id, COUNT(*) AS n
@@ -246,7 +255,9 @@ booksRouter.get('/popular-now', authMiddleware, (req: AuthRequest, res: Response
       pageCount: 0,
     }));
 
-    res.json({ books });
+    const payload = { books };
+    setCache(cacheKey, payload, POPULAR_NOW_CACHE_TTL_MS);
+    res.json(payload);
   } catch (e) {
     console.error('popular-now error', e);
     res.json({ books: [] });

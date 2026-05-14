@@ -4,6 +4,11 @@ import { authMiddleware, type AuthRequest } from '../middleware.js';
 import type { Response } from 'express';
 import { filterAndNormalizeSubjects } from '../lib/subjects.js';
 import { getRecWeights, normalizedRecWeights } from '../lib/recWeights.js';
+import {
+  parseExcludeQuery,
+  scoreFeaturedCandidatePool,
+  sortContentBasedBooks,
+} from '../lib/hybridRecScore.js';
 
 /**
  * RECOMMENDATION SYSTEM — INFLUENCE OF GENRES
@@ -137,18 +142,6 @@ async function fetchBooksForSubject(subject: string, limit = 20): Promise<RecBoo
   }
 }
 
-function hybridContentScore(
-  book: RecBook,
-  favSet: Set<string>,
-  userSubjectUnion: Set<string>,
-  nw: { g: number; a: number; s: number; c: number },
-): number {
-  const subs = (book.subjects || []).map((s) => s.toLowerCase().trim());
-  const genreOv = subs.length === 0 ? 0 : subs.filter((s) => favSet.has(s)).length / subs.length;
-  const subjOv = subs.length === 0 ? 0 : subs.filter((s) => userSubjectUnion.has(s)).length / subs.length;
-  return nw.g * genreOv + nw.s * subjOv;
-}
-
 // ─── Content-Based Filtering ───────────────────────────────────────────
 
 /**
@@ -242,11 +235,7 @@ recommendationsRouter.get('/content-based', async (req: AuthRequest, res: Respon
 
     if (recommendedBooks.length > 0) {
       const nw = normalizedRecWeights(getRecWeights());
-      recommendedBooks.sort((a, b) => {
-        const scoreA = hybridContentScore(a, favSet, globalSubjectUnion, nw);
-        const scoreB = hybridContentScore(b, favSet, globalSubjectUnion, nw);
-        return scoreB - scoreA;
-      });
+      const sortedBooks = sortContentBasedBooks(recommendedBooks, nw, favSet, globalSubjectUnion);
       sections.push({
         sourceBook: {
           key: book.book_key,
@@ -254,7 +243,7 @@ recommendationsRouter.get('/content-based', async (req: AuthRequest, res: Respon
           author: book.author,
           coverId: book.cover_id,
         },
-        books: recommendedBooks.slice(0, 10),
+        books: sortedBooks.slice(0, 10),
       });
     }
 
@@ -358,28 +347,8 @@ recommendationsRouter.get('/collaborative', async (req: AuthRequest, res: Respon
   res.json({ books: top });
 });
 
-function hybridFeaturedScore(
-  book: RecBook,
-  favSet: Set<string>,
-  userSubjectUnion: Set<string>,
-  userAuthors: Set<string>,
-  collabMap: Map<string, number>,
-  nw: { g: number; a: number; s: number; c: number },
-): number {
-  const subs = (book.subjects || []).map((s) => s.toLowerCase().trim());
-  const genreOv = subs.length === 0 ? 0 : subs.filter((s) => favSet.has(s)).length / subs.length;
-  const subjOv = subs.length === 0 ? 0 : subs.filter((s) => userSubjectUnion.has(s)).length / subs.length;
-  const authorOv = userAuthors.has(String(book.author).toLowerCase().trim()) ? 1 : 0;
-  const k = book.key.replace(/^\//, '');
-  const collabOv = collabMap.get(k) ?? 0;
-  return nw.g * genreOv + nw.s * subjOv + nw.a * authorOv + nw.c * collabOv;
-}
-
 async function enrichFeaturedBook(
   book: RecBook,
-  favoriteGenres: string[],
-  favSet: Set<string>,
-  subjectLabel: string,
 ): Promise<{
   key: string;
   title: string;
@@ -389,8 +358,6 @@ async function enrichFeaturedBook(
   subjects: string[];
   ratingsAverage: number;
   ratingsCount: number;
-  reason: string | null;
-  matchingGenres?: string[];
 } | null> {
   const normalizedKey = book.key.replace(/^\//, '');
   try {
@@ -409,16 +376,6 @@ async function enrichFeaturedBook(
     } catch { /* ignore */ }
 
     const bookSubjects = filterAndNormalizeSubjects(details.subjects || []);
-    const matchingGenres = bookSubjects.filter((s: string) =>
-      favoriteGenres.some((fg: string) => fg.toLowerCase().trim() === s.toLowerCase().trim())
-    );
-    const displaySubject = subjectLabel.replace(/_/g, ' ');
-    const reason =
-      matchingGenres.length > 0
-        ? null
-        : favoriteGenres.length > 0
-          ? `Based on your interest in ${displaySubject}`
-          : `Based on your interest in ${displaySubject}`;
     return {
       key: normalizedKey,
       title: book.title,
@@ -428,8 +385,6 @@ async function enrichFeaturedBook(
       subjects: bookSubjects,
       ratingsAverage,
       ratingsCount,
-      reason,
-      matchingGenres: matchingGenres.length > 0 ? matchingGenres : undefined,
     };
   } catch {
     return null;
@@ -442,6 +397,7 @@ recommendationsRouter.get('/featured', async (req: AuthRequest, res: Response) =
   const userId = req.userId!;
   const page = Math.max(0, parseInt(String(req.query.page ?? '0'), 10) || 0);
   const pageSize = Math.min(20, Math.max(1, parseInt(String(req.query.pageSize ?? '8'), 10) || 8));
+  const excludeClient = parseExcludeQuery(req.query as Record<string, unknown>);
 
   const user = db.prepare('SELECT favorite_genres FROM users WHERE id = ?').get(userId) as any;
   const favoriteGenres: string[] = JSON.parse(user?.favorite_genres || '[]');
@@ -478,7 +434,6 @@ recommendationsRouter.get('/featured', async (req: AuthRequest, res: Response) =
     subjectsToTry = ['fantasy', 'science_fiction', 'mystery'];
   }
 
-  const nw = normalizedRecWeights(getRecWeights());
   const candidateMap = new Map<string, { book: RecBook; subject: string }>();
 
   for (const subject of subjectsToTry) {
@@ -490,25 +445,49 @@ recommendationsRouter.get('/featured', async (req: AuthRequest, res: Response) =
     }
   }
 
-  const scored = [...candidateMap.values()].map(({ book, subject }) => ({
-    book,
-    subject,
-    score: hybridFeaturedScore(book, favSet, userSubjectUnion, userAuthors, collabMap, nw),
-  }));
-  scored.sort((a, b) => b.score - a.score);
+  const nw = normalizedRecWeights(getRecWeights());
+  const candidateRows = [...candidateMap.values()];
+  const scoredPool = scoreFeaturedCandidatePool(
+    candidateRows,
+    nw,
+    favoriteGenres,
+    favSet,
+    userSubjectUnion,
+    userAuthors,
+    collabMap,
+  );
+
+  const mergedExclude = new Set<string>([...excludedKeys, ...excludeClient]);
+  const filtered = scoredPool.filter((row) => !mergedExclude.has(row.book.key.replace(/^\//, '')));
 
   const start = page * pageSize;
-  const slice = scored.slice(start, start + pageSize);
-  const enriched = await Promise.all(
-    slice.map(({ book, subject }) => enrichFeaturedBook(book, favoriteGenres, favSet, subject)),
-  );
+  const slice = filtered.slice(start, start + pageSize);
+
+  const enriched: Array<Record<string, unknown> | null> = [];
+  const batchSize = 3;
+  for (let i = 0; i < slice.length; i += batchSize) {
+    const chunk = slice.slice(i, i + batchSize);
+    const part = await Promise.all(
+      chunk.map(async (row) => {
+        const base = await enrichFeaturedBook(row.book);
+        if (!base) return null;
+        return {
+          ...base,
+          primarySignal: row.primarySignal,
+          explanationTags: row.explanationTags,
+          hybridScore: row.finalScore,
+        };
+      }),
+    );
+    enriched.push(...part);
+  }
   const books = enriched.filter((x): x is NonNullable<typeof x> => x != null);
 
   res.json({
     books,
     page,
     pageSize,
-    hasMore: start + pageSize < scored.length,
+    hasMore: start + pageSize < filtered.length,
   });
 });
 

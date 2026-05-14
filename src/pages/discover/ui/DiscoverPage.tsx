@@ -26,10 +26,14 @@ export function DiscoverPage() {
 
   // State
   const [featuredBooks, setFeaturedBooks] = useState<FeaturedBook[]>([]);
-  const [featuredPage, setFeaturedPage] = useState(0);
   const [featuredHasMore, setFeaturedHasMore] = useState(false);
   const [carouselIndex, setCarouselIndex] = useState(0);
   const featured = featuredBooks[carouselIndex] ?? null;
+  const featuredKeysRef = useRef<string[]>([]);
+
+  useEffect(() => {
+    featuredKeysRef.current = featuredBooks.map((b) => b.key);
+  }, [featuredBooks]);
 
   useEffect(() => {
     setCarouselIndex(0);
@@ -42,19 +46,15 @@ export function DiscoverPage() {
   const [featuredAction, setFeaturedAction] = useState<'idle' | 'adding' | 'dismissing'>('idle');
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
 
-  const featuredPageRef = useRef(0);
-
   // Load all recommendations in parallel
-  const loadRecommendations = useCallback((bumpFeaturedPage = false) => {
+  const loadRecommendations = useCallback((refreshFeatured = false) => {
     setFeaturedLoading(true);
     setContentLoading(true);
     setCollabLoading(true);
 
-    const fp = bumpFeaturedPage ? featuredPageRef.current + 1 : 0;
-    featuredPageRef.current = fp;
-    setFeaturedPage(fp);
+    const excludeFeatured = refreshFeatured ? featuredKeysRef.current : [];
 
-    getFeaturedRecommendations(fp, 8)
+    getFeaturedRecommendations(0, 8, excludeFeatured)
       .then(({ books, hasMore }) => {
         setFeaturedBooks(books);
         setFeaturedHasMore(hasMore);
@@ -94,7 +94,7 @@ export function DiscoverPage() {
       );
       // Refresh featured to get a new book
       setFeaturedLoading(true);
-      const { books } = await getFeaturedRecommendations(featuredPageRef.current, 8);
+      const { books } = await getFeaturedRecommendations(0, 8, featuredKeysRef.current);
       setFeaturedBooks(books);
     } catch { /* ignore */ }
     setFeaturedAction('idle');
@@ -113,7 +113,7 @@ export function DiscoverPage() {
       );
       // Refresh featured
       setFeaturedLoading(true);
-      const { books } = await getFeaturedRecommendations(featuredPageRef.current, 8);
+      const { books } = await getFeaturedRecommendations(0, 8, featuredKeysRef.current);
       setFeaturedBooks(books);
     } catch { /* ignore */ }
     setFeaturedAction('idle');
@@ -131,7 +131,6 @@ export function DiscoverPage() {
           </h1>
           <p className="text-brown/60 mt-1">
             Personalized recommendations just for you
-            <span className="ml-2 text-xs text-brown/40">(set #{featuredPage + 1})</span>
           </p>
         </div>
         <Button
@@ -198,6 +197,10 @@ export function DiscoverPage() {
                       src={getBookCoverUrl(featured.coverId, 'L')}
                       alt={featured.title}
                       className="w-full h-full object-cover md:rounded-l-3xl"
+                      loading="lazy"
+                      decoding="async"
+                      width={280}
+                      height={420}
                     />
                   ) : (
                     <div className={`w-full h-full bg-gradient-to-br ${getBookColor(featured.key)} md:rounded-l-3xl flex items-center justify-center p-8`}>
@@ -210,13 +213,30 @@ export function DiscoverPage() {
               {/* Details */}
               <div className="flex-1 p-6 sm:p-8 lg:p-10 flex flex-col justify-between">
                 <div>
-                  {/* Reason badge */}
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber/15 text-amber-800 rounded-full text-xs font-medium mb-4">
-                    <Sparkles size={12} />
-                    {featured.matchingGenres && featured.matchingGenres.length > 0
-                      ? `Matches your favorite genres: ${featured.matchingGenres.join(', ')}`
-                      : featured.reason ?? 'Recommended for you'}
-                  </span>
+                  <div className="mb-4 flex flex-col gap-2">
+                    <span className="text-xs font-medium text-brown/50 uppercase tracking-wide">
+                      Top signal:{' '}
+                      {(
+                        {
+                          genre: 'Genres',
+                          subject: 'Subjects',
+                          author: 'Author',
+                          collaborative: 'Readers like you',
+                        } as const
+                      )[featured.primarySignal ?? 'genre']}
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      {(featured.explanationTags?.length ? featured.explanationTags : ['Recommended for you']).map((tag) => (
+                        <span
+                          key={tag}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber/12 text-amber-900 rounded-full text-xs font-medium border border-amber/20"
+                        >
+                          <Sparkles size={11} className="shrink-0" />
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
 
                   <h2
                     className="text-2xl sm:text-3xl font-serif font-bold text-brown leading-tight cursor-pointer hover:text-amber-800 transition-colors"

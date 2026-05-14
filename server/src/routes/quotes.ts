@@ -6,15 +6,25 @@ import type { Response } from 'express';
 export const quotesRouter = Router();
 quotesRouter.use(authMiddleware);
 
+const QUOTE_MEMORY_TTL_MS = 60_000;
+let quoteMemory: { payload: { quote: string; author: string }; at: number } | null = null;
+
 quotesRouter.get('/daily', async (_req: AuthRequest, res: Response) => {
   const MS_DAY = 24 * 60 * 60 * 1000;
   try {
+    if (quoteMemory && Date.now() - quoteMemory.at < QUOTE_MEMORY_TTL_MS) {
+      res.json(quoteMemory.payload);
+      return;
+    }
+
     const cacheRow = db.prepare("SELECT value FROM settings WHERE key = 'daily_quote_cache'").get() as { value?: string } | undefined;
     const timeRow = db.prepare("SELECT value FROM settings WHERE key = 'daily_quote_fetched_at'").get() as { value?: string } | undefined;
     if (cacheRow?.value && timeRow?.value) {
       const fetched = new Date(timeRow.value).getTime();
       if (!Number.isNaN(fetched) && Date.now() - fetched < MS_DAY) {
-        res.json(JSON.parse(cacheRow.value));
+        const payload = JSON.parse(cacheRow.value) as { quote: string; author: string };
+        quoteMemory = { payload, at: Date.now() };
+        res.json(payload);
         return;
       }
     }
@@ -29,9 +39,11 @@ quotesRouter.get('/daily', async (_req: AuthRequest, res: Response) => {
     };
     db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('daily_quote_cache', ?)").run(JSON.stringify(payload));
     db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('daily_quote_fetched_at', ?)").run(new Date().toISOString());
+    quoteMemory = { payload, at: Date.now() };
     res.json(payload);
   } catch {
     const fallback = { quote: 'A reader lives a thousand lives before he dies.', author: 'George R.R. Martin' };
+    quoteMemory = { payload: fallback, at: Date.now() };
     res.json(fallback);
   }
 });

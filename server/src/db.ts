@@ -194,6 +194,20 @@ export function initDB() {
       db.prepare("UPDATE users SET role = 'superadmin' WHERE id = ?").run(firstUser.id);
     }
   }
+
+  // Performance: indexes for hot queries (recommendations, popular-now, moderation)
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_reading_list_user_id ON reading_list(user_id);
+    CREATE INDEX IF NOT EXISTS idx_reading_list_book_key ON reading_list(book_key);
+    CREATE INDEX IF NOT EXISTS idx_reading_list_user_book ON reading_list(user_id, book_key);
+    CREATE INDEX IF NOT EXISTS idx_favorites_user_id ON favorites(user_id);
+    CREATE INDEX IF NOT EXISTS idx_favorites_book_key ON favorites(book_key);
+    CREATE INDEX IF NOT EXISTS idx_not_interested_user_id ON not_interested(user_id);
+    CREATE INDEX IF NOT EXISTS idx_comments_user_id ON comments(user_id);
+    CREATE INDEX IF NOT EXISTS idx_comments_book_key ON comments(book_key);
+    CREATE INDEX IF NOT EXISTS idx_comment_reports_comment_id ON comment_reports(comment_id);
+    CREATE INDEX IF NOT EXISTS idx_search_logs_created_at ON search_logs(created_at);
+  `);
 }
 
 export default db;

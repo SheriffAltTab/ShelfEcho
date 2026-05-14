@@ -15,6 +15,7 @@ import { adminRouter } from './routes/admin.js';
 import { quotesRouter } from './routes/quotes.js';
 
 import 'dotenv/config';
+import passport from 'passport';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -31,6 +32,7 @@ const allowedOrigins = [
 if (process.env.FRONTEND_URL) allowedOrigins.push(process.env.FRONTEND_URL);
 app.use(cors({ origin: (origin, cb) => cb(null, !origin || allowedOrigins.includes(origin) ? (origin || true) : false) }));
 app.use(express.json());
+app.use(passport.initialize());
 
 // Serve uploaded files
 app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));

@@ -5,23 +5,14 @@ import db from '../db.js';
 import { generateToken, authMiddleware, type AuthRequest } from '../middleware.js';
 import type { Response } from 'express';
 import { sendPasswordResetEmail, sendVerificationEmail } from '../lib/mail.js';
-import {
-  exchangeGoogleCode,
-  fetchGoogleProfile,
-  googleAuthUrl,
-  verifyGoogleState,
-} from '../lib/googleAuth.js';
+import passport from 'passport';
+import { isGoogleOAuthConfigured, registerGooglePassportStrategy } from '../lib/passportGoogle.js';
+
+registerGooglePassportStrategy();
 
 export const authRouter = Router();
 
 const FRONTEND_URL = (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
-
-function googleRedirectUri(): string {
-  return (
-    process.env.GOOGLE_REDIRECT_URI ||
-    `http://localhost:${Number(process.env.PORT) || 3001}/api/auth/google/callback`
-  ).replace(/\/$/, '');
-}
 
 function mapPublicUser(user: Record<string, unknown>) {
   return {
@@ -37,85 +28,30 @@ function mapPublicUser(user: Record<string, unknown>) {
   };
 }
 
-authRouter.get('/google', (_req, res) => {
-  try {
-    const url = googleAuthUrl(googleRedirectUri());
-    res.redirect(302, url);
-  } catch (e) {
-    console.error('[auth/google]', e);
+authRouter.get('/google', (req, res, next) => {
+  if (!isGoogleOAuthConfigured()) {
     res.status(503).json({ error: 'Google sign-in is not configured' });
+    return;
   }
+  passport.authenticate('google', { scope: ['profile', 'email'], session: false })(req, res, next);
 });
 
-authRouter.get('/google/callback', async (req, res) => {
-  const code = typeof req.query.code === 'string' ? req.query.code : '';
-  const state = typeof req.query.state === 'string' ? req.query.state : '';
-  const err = typeof req.query.error === 'string' ? req.query.error : '';
-
-  const failRedirect = (msg: string) => {
-    res.redirect(302, `${FRONTEND_URL}/auth?error=${encodeURIComponent(msg)}`);
-  };
-
-  if (err || !code) {
-    failRedirect(err || 'Google sign-in was cancelled');
-    return;
-  }
-  if (!verifyGoogleState(state)) {
-    failRedirect('Invalid OAuth state');
-    return;
-  }
-
-  try {
-    const redirectUri = googleRedirectUri();
-    const { access_token } = await exchangeGoogleCode(code, redirectUri);
-    const profile = await fetchGoogleProfile(access_token);
-
-    const existingByGoogle = db.prepare('SELECT * FROM users WHERE google_id = ?').get(profile.sub) as
-      | Record<string, unknown>
-      | undefined;
-    let row = existingByGoogle;
-
-    if (!row) {
-      const byEmail = db.prepare('SELECT * FROM users WHERE email = ?').get(profile.email) as
-        | Record<string, unknown>
-        | undefined;
-      if (byEmail) {
-        db.prepare(
-          'UPDATE users SET google_id = ?, is_active = 1, email_verification_token = NULL, email_verification_expires = NULL WHERE id = ?',
-        ).run(profile.sub, byEmail.id);
-        row = db.prepare('SELECT * FROM users WHERE id = ?').get(byEmail.id) as Record<string, unknown>;
-      } else {
-        const randomPw = crypto.randomBytes(32).toString('hex');
-        const hashedPassword = bcrypt.hashSync(randomPw, 12);
-        const ins = db
-          .prepare(
-            `INSERT INTO users (name, email, password, onboarded, is_active, google_id)
-             VALUES (?, ?, ?, 0, 1, ?)`,
-          )
-          .run(profile.name || profile.email.split('@')[0], profile.email, hashedPassword, profile.sub);
-        row = db.prepare('SELECT * FROM users WHERE id = ?').get(ins.lastInsertRowid) as Record<string, unknown>;
-      }
-    }
-
-    if (!row) {
-      failRedirect('Could not create account');
+authRouter.get(
+  '/google/callback',
+  passport.authenticate('google', {
+    session: false,
+    failureRedirect: `${FRONTEND_URL}/auth?error=google_sign_in_failed`,
+  }),
+  (req, res) => {
+    const user = req.user as { userId?: number } | undefined;
+    if (!user?.userId) {
+      res.redirect(302, `${FRONTEND_URL}/auth?error=google_no_user`);
       return;
     }
-
-    if (Number(row.blocked) === 1) {
-      failRedirect('Account is blocked');
-      return;
-    }
-
-    db.prepare('UPDATE users SET is_active = 1 WHERE id = ?').run(row.id);
-
-    const token = generateToken(row.id as number);
+    const token = generateToken(user.userId);
     res.redirect(302, `${FRONTEND_URL}/auth/callback#token=${encodeURIComponent(token)}`);
-  } catch (e) {
-    console.error('[auth/google/callback]', e);
-    failRedirect('Google sign-in failed');
-  }
-});
+  },
+);
 
 authRouter.post('/register', async (req, res) => {
   try {

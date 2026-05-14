@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { lazy, Suspense } from 'react';
 import { useAuth } from '@/features/auth/model/authContext';
 import { ErrorBoundary } from '@/shared/ui/ErrorBoundary';
 import { Layout } from '@/widgets/layout/ui/Layout';
@@ -13,10 +14,19 @@ import { BookDetailsPage } from '@/pages/book-details/ui/BookDetailsPage';
 import { MyBooksPage } from '@/pages/my-books/ui/MyBooksPage';
 import { ProfilePage } from '@/pages/profile/ui/ProfilePage';
 import { SearchPage } from '@/pages/search/ui/SearchPage';
-import { DiscoverPage } from '@/pages/discover/ui/DiscoverPage';
 import { AuthorPage } from '@/pages/author/ui/AuthorPage';
 import { UserProfilePage } from '@/pages/user-profile/ui/UserProfilePage';
-import { AdminPage } from '@/pages/admin/ui/AdminPage';
+
+const AdminPage = lazy(() => import('@/pages/admin/ui/AdminPage').then((m) => ({ default: m.AdminPage })));
+const DiscoverPage = lazy(() => import('@/pages/discover/ui/DiscoverPage').then((m) => ({ default: m.DiscoverPage })));
+
+function RouteSpinner() {
+  return (
+    <div className="min-h-screen bg-linen flex items-center justify-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-4 border-amber border-t-transparent" />
+    </div>
+  );
+}
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -158,7 +168,9 @@ export function AppRouter() {
           element={
             <ProtectedRoute>
               <Layout>
-                <DiscoverPage />
+                <Suspense fallback={<RouteSpinner />}>
+                  <DiscoverPage />
+                </Suspense>
               </Layout>
             </ProtectedRoute>
           }
@@ -218,7 +230,9 @@ export function AppRouter() {
           element={
             <ProtectedRoute>
               <Layout>
-                <AdminPage />
+                <Suspense fallback={<RouteSpinner />}>
+                  <AdminPage />
+                </Suspense>
               </Layout>
             </ProtectedRoute>
           }
