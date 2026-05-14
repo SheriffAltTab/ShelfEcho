@@ -6,13 +6,14 @@ import { generateToken, authMiddleware, type AuthRequest } from '../middleware.j
 import type { Response } from 'express';
 import { sendPasswordResetEmail, sendVerificationEmail } from '../lib/mail.js';
 import passport from 'passport';
-import { isGoogleOAuthConfigured, registerGooglePassportStrategy } from '../lib/passportGoogle.js';
-
-registerGooglePassportStrategy();
+import { isGoogleOAuthConfigured } from '../lib/passportGoogle.js';
 
 export const authRouter = Router();
 
-const FRONTEND_URL = (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
+// Змінено на функцію: тепер змінна .env зчитується в правильний момент
+function getFrontendUrl() {
+  return (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
+}
 
 function mapPublicUser(user: Record<string, unknown>) {
   return {
@@ -38,18 +39,21 @@ authRouter.get('/google', (req, res, next) => {
 
 authRouter.get(
   '/google/callback',
-  passport.authenticate('google', {
-    session: false,
-    failureRedirect: `${FRONTEND_URL}/auth?error=google_sign_in_failed`,
-  }),
+  (req, res, next) => {
+    // Обгортаємо виклик, щоб використати правильну URL під час помилки
+    passport.authenticate('google', {
+      session: false,
+      failureRedirect: `${getFrontendUrl()}/auth?error=google_sign_in_failed`,
+    })(req, res, next);
+  },
   (req, res) => {
     const user = req.user as { userId?: number } | undefined;
     if (!user?.userId) {
-      res.redirect(302, `${FRONTEND_URL}/auth?error=google_no_user`);
+      res.redirect(302, `${getFrontendUrl()}/auth?error=google_no_user`);
       return;
     }
     const token = generateToken(user.userId);
-    res.redirect(302, `${FRONTEND_URL}/auth/callback#token=${encodeURIComponent(token)}`);
+    res.redirect(302, `${getFrontendUrl()}/auth/callback#token=${encodeURIComponent(token)}`);
   },
 );
 
@@ -82,7 +86,7 @@ authRouter.post('/register', async (req, res) => {
        VALUES (?, ?, ?, 0, 0, ?, ?)`,
     ).run(name, email, hashedPassword, verifyToken, expires);
 
-    const verifyUrl = `${FRONTEND_URL}/verify-email?token=${encodeURIComponent(verifyToken)}`;
+    const verifyUrl = `${getFrontendUrl()}/verify-email?token=${encodeURIComponent(verifyToken)}`;
     await sendVerificationEmail(email, verifyUrl);
 
     res.status(201).json({
@@ -183,7 +187,7 @@ authRouter.post('/forgot-password', async (req, res) => {
     user.id,
   );
 
-  const resetUrl = `${FRONTEND_URL}/reset-password?token=${encodeURIComponent(resetToken)}`;
+  const resetUrl = `${getFrontendUrl()}/reset-password?token=${encodeURIComponent(resetToken)}`;
   await sendPasswordResetEmail(email.trim(), resetUrl);
 
   res.json(generic);
