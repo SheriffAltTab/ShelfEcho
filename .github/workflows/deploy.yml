@@ -14,17 +14,20 @@ jobs:
     steps:
       - name: Deploy to AWS via SSH
         uses: appleboy/ssh-action@master
-        # 1. Оголошуємо змінні для плагіна
+        # 1. Оголошуємо змінні для плагіна (додано пошту)
         env:
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           GOOGLE_REDIRECT_URI: ${{ secrets.GOOGLE_REDIRECT_URI }}
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_KEY }}
           # 2. Передаємо їх у скрипт
-          envs: GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET,GOOGLE_REDIRECT_URI
+          envs: GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET,GOOGLE_REDIRECT_URI,GMAIL_USER,GMAIL_APP_PASSWORD,EMAIL_FROM
           script: |
             export NVM_DIR="$HOME/.nvm"
             [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
@@ -43,10 +46,16 @@ jobs:
             # Записуємо базові налаштування
             echo "PORT=3001" > .env
             echo "FRONTEND_URL=https://shelfecho.site" >> .env
+            
             # Додаємо секрети від Google
             echo "GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID" >> .env
             echo "GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET" >> .env
             echo "GOOGLE_REDIRECT_URI=$GOOGLE_REDIRECT_URI" >> .env
+            
+            # Додаємо секрети для пошти
+            echo "GMAIL_USER=$GMAIL_USER" >> .env
+            echo "GMAIL_APP_PASSWORD=$GMAIL_APP_PASSWORD" >> .env
+            echo "EMAIL_FROM=$EMAIL_FROM" >> .env
             
             npm install
             npm run build
