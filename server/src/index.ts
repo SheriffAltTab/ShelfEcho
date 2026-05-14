@@ -17,6 +17,8 @@ import { quotesRouter } from './routes/quotes.js';
 import 'dotenv/config';
 import passport from 'passport';
 
+import './lib/passportGoogle.js';
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
