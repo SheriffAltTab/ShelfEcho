@@ -12,27 +12,42 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy via SSH (AWS EC2-style host)
+      - name: Deploy to AWS via SSH
         uses: appleboy/ssh-action@master
+        # 1. Оголошуємо змінні для плагіна
+        env:
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_REDIRECT_URI: ${{ secrets.GOOGLE_REDIRECT_URI }}
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_KEY }}
+          # 2. Передаємо їх у скрипт
+          envs: GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET,GOOGLE_REDIRECT_URI
           script: |
             export NVM_DIR="$HOME/.nvm"
             [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
             
-            cd ~/ShelfEcho || git clone https://github.com/SheriffAltTab/ShelfEcho.git ~/ShelfEcho
             cd ~/ShelfEcho
             git fetch --all
             git reset --hard origin/master
             
+            # Фронтенд .env
             echo "VITE_API_URL=https://shelfecho.site/api" > .env
-            
             npm install
             npm run build
             
+            # Бекенд .env
             cd server
+            # Записуємо базові налаштування
+            echo "PORT=3001" > .env
+            echo "FRONTEND_URL=https://shelfecho.site" >> .env
+            # Додаємо секрети від Google
+            echo "GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID" >> .env
+            echo "GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET" >> .env
+            echo "GOOGLE_REDIRECT_URI=$GOOGLE_REDIRECT_URI" >> .env
+            
             npm install
             npm run build
             
