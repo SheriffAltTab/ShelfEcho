@@ -17,7 +17,8 @@ import { quotesRouter } from './routes/quotes.js';
 import 'dotenv/config';
 import passport from 'passport';
 
-import './lib/passportGoogle.js';
+// 1. Імпортуємо нашу функцію конфігурації
+import { registerGooglePassportStrategy } from './lib/passportGoogle.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -34,7 +35,12 @@ const allowedOrigins = [
 if (process.env.FRONTEND_URL) allowedOrigins.push(process.env.FRONTEND_URL);
 app.use(cors({ origin: (origin, cb) => cb(null, !origin || allowedOrigins.includes(origin) ? (origin || true) : false) }));
 app.use(express.json());
+
+// Ініціалізуємо Passport
 app.use(passport.initialize());
+
+// 2. ОБОВ'ЯЗКОВО викликаємо функцію реєстрації стратегії ТУТ
+registerGooglePassportStrategy();
 
 // Serve uploaded files
 app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));

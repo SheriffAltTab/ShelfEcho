@@ -17,9 +17,14 @@ export function googleRedirectUri(): string {
 export function registerGooglePassportStrategy(): void {
   const clientID = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-  if (!clientID || !clientSecret) return;
+  
+  if (!clientID || !clientSecret) {
+    console.warn('⚠️ ПОПЕРЕДЖЕННЯ: Google OAuth НЕ налаштовано! Відсутні GOOGLE_CLIENT_ID або GOOGLE_CLIENT_SECRET у файлі .env.');
+    return; // Залишаємо early return, але тепер ми хоча б побачимо причину в логах
+  }
 
   passport.use(
+    'google', // Явно вказуємо ім'я стратегії
     new GoogleStrategy(
       {
         clientID,
