@@ -207,3 +207,4 @@ All non-auth routes that require a user expect `Authorization: Bearer <jwt>`.
 ## License
 
 Private project. All rights reserved.
+ 
