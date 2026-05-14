@@ -1,0 +1,25 @@
+name: Deploy ShelfEcho
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to AWS via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            cd ~/ShelfEcho || git clone https://github.com/SheriffAltTab/ShelfEcho.git ~/ShelfEcho
+            cd ~/ShelfEcho
+            git pull origin main
+            npm install
+            npm run build
+            # Перезапуск процесу в PM2
+            pm2 delete shelfecho || true
+            pm2 start dist/index.js --name "shelfecho"
