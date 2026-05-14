@@ -3,6 +3,10 @@ import { useAuth } from '@/features/auth/model/authContext';
 import { ErrorBoundary } from '@/shared/ui/ErrorBoundary';
 import { Layout } from '@/widgets/layout/ui/Layout';
 import { AuthPage } from '@/pages/auth/ui/AuthPage';
+import { AuthCallbackPage } from '@/pages/auth/ui/AuthCallbackPage';
+import { VerifyEmailPage } from '@/pages/auth/ui/VerifyEmailPage';
+import { ForgotPasswordPage } from '@/pages/auth/ui/ForgotPasswordPage';
+import { ResetPasswordPage } from '@/pages/auth/ui/ResetPasswordPage';
 import { OnboardingPage } from '@/pages/onboarding/ui/OnboardingPage';
 import { HomePage } from '@/pages/home/ui/HomePage';
 import { BookDetailsPage } from '@/pages/book-details/ui/BookDetailsPage';
@@ -79,6 +83,38 @@ export function AppRouter() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route
+          path="/auth/callback"
+          element={
+            <ErrorBoundary>
+              <AuthCallbackPage />
+            </ErrorBoundary>
+          }
+        />
+        <Route
+          path="/verify-email"
+          element={
+            <ErrorBoundary>
+              <VerifyEmailPage />
+            </ErrorBoundary>
+          }
+        />
+        <Route
+          path="/forgot-password"
+          element={
+            <ErrorBoundary>
+              <ForgotPasswordPage />
+            </ErrorBoundary>
+          }
+        />
+        <Route
+          path="/reset-password"
+          element={
+            <ErrorBoundary>
+              <ResetPasswordPage />
+            </ErrorBoundary>
+          }
+        />
         <Route
           path="/auth"
           element={

@@ -3,6 +3,7 @@ import db from '../db.js';
 import { authMiddleware, type AuthRequest } from '../middleware.js';
 import type { Response } from 'express';
 import { filterAndNormalizeSubjects } from '../lib/subjects.js';
+import { getRecWeights, normalizedRecWeights } from '../lib/recWeights.js';
 
 /**
  * RECOMMENDATION SYSTEM — INFLUENCE OF GENRES
@@ -68,6 +69,41 @@ function getUserExcludedKeys(userId: number): Set<string> {
   return keys;
 }
 
+/** Normalized collaborative popularity by book_key (0..1) for hybrid scoring */
+function getCollaborativeScoreMap(userId: number): Map<string, number> {
+  const userBookKeys = db.prepare('SELECT book_key FROM reading_list WHERE user_id = ?').all(userId) as any[];
+  if (userBookKeys.length === 0) return new Map();
+  const myKeys = userBookKeys.map((b: any) => b.book_key);
+  const placeholders = myKeys.map(() => '?').join(',');
+  const similarUsers = db.prepare(`
+    SELECT user_id, COUNT(*) as common_books
+    FROM reading_list
+    WHERE user_id != ? AND book_key IN (${placeholders})
+    GROUP BY user_id
+    ORDER BY common_books DESC
+    LIMIT 20
+  `).all(userId, ...myKeys) as any[];
+  if (similarUsers.length === 0) return new Map();
+  const similarUserIds = similarUsers.map((u: any) => u.user_id);
+  const userPlaceholders = similarUserIds.map(() => '?').join(',');
+  const candidateBooks = db.prepare(`
+    SELECT book_key, COUNT(DISTINCT user_id) as user_count
+    FROM reading_list
+    WHERE user_id IN (${userPlaceholders}) AND user_id != ?
+    GROUP BY book_key
+    ORDER BY user_count DESC
+    LIMIT 80
+  `).all(...similarUserIds, userId) as any[];
+  let maxC = 0;
+  for (const row of candidateBooks) maxC = Math.max(maxC, row.user_count || 0);
+  const map = new Map<string, number>();
+  for (const row of candidateBooks) {
+    const k = String(row.book_key).replace(/^\//, '');
+    map.set(k, maxC > 0 ? (row.user_count || 0) / maxC : 0);
+  }
+  return map;
+}
+
 interface RecBook {
   key: string;
   title: string;
@@ -99,6 +135,18 @@ async function fetchBooksForSubject(subject: string, limit = 20): Promise<RecBoo
   } catch {
     return [];
   }
+}
+
+function hybridContentScore(
+  book: RecBook,
+  favSet: Set<string>,
+  userSubjectUnion: Set<string>,
+  nw: { g: number; a: number; s: number; c: number },
+): number {
+  const subs = (book.subjects || []).map((s) => s.toLowerCase().trim());
+  const genreOv = subs.length === 0 ? 0 : subs.filter((s) => favSet.has(s)).length / subs.length;
+  const subjOv = subs.length === 0 ? 0 : subs.filter((s) => userSubjectUnion.has(s)).length / subs.length;
+  return nw.g * genreOv + nw.s * subjOv;
 }
 
 // ─── Content-Based Filtering ───────────────────────────────────────────
@@ -140,6 +188,12 @@ recommendationsRouter.get('/content-based', async (req: AuthRequest, res: Respon
     const subjects = await getBookSubjects(book.book_key);
     bookSubjectsMap.set(book.book_key, { title: book.title, subjects });
   }));
+
+  const globalSubjectUnion = new Set<string>();
+  for (const g of favoriteGenres) globalSubjectUnion.add(g.toLowerCase().trim());
+  for (const v of bookSubjectsMap.values()) {
+    for (const s of v.subjects) globalSubjectUnion.add(s.toLowerCase().trim());
+  }
 
   // Build sections: "Because you liked [Book]"
   const sections: Array<{
@@ -187,6 +241,12 @@ recommendationsRouter.get('/content-based', async (req: AuthRequest, res: Respon
     }
 
     if (recommendedBooks.length > 0) {
+      const nw = normalizedRecWeights(getRecWeights());
+      recommendedBooks.sort((a, b) => {
+        const scoreA = hybridContentScore(a, favSet, globalSubjectUnion, nw);
+        const scoreB = hybridContentScore(b, favSet, globalSubjectUnion, nw);
+        return scoreB - scoreA;
+      });
       sections.push({
         sourceBook: {
           key: book.book_key,
@@ -278,112 +338,178 @@ recommendationsRouter.get('/collaborative', async (req: AuthRequest, res: Respon
         userCount: book.user_count,
       });
     }
-    if (result.length >= 10) break;
   }
 
-  res.json({ books: result });
+  const nw = normalizedRecWeights(getRecWeights());
+  const userAuthors = new Set(
+    (db.prepare("SELECT DISTINCT lower(author) as a FROM reading_list WHERE user_id = ? AND author IS NOT NULL AND trim(author) != ''").all(userId) as any[])
+      .map((r: any) => String(r.a || '').trim())
+      .filter(Boolean),
+  );
+  const maxU = Math.max(...result.map((r) => r.userCount || 0), 1);
+  result.sort((a, b) => {
+    const sa = nw.c * ((a.userCount || 0) / maxU) + nw.a * (userAuthors.has(String(a.author).toLowerCase().trim()) ? 1 : 0);
+    const sb = nw.c * ((b.userCount || 0) / maxU) + nw.a * (userAuthors.has(String(b.author).toLowerCase().trim()) ? 1 : 0);
+    return sb - sa;
+  });
+
+  const top = result.slice(0, 10);
+
+  res.json({ books: top });
 });
+
+function hybridFeaturedScore(
+  book: RecBook,
+  favSet: Set<string>,
+  userSubjectUnion: Set<string>,
+  userAuthors: Set<string>,
+  collabMap: Map<string, number>,
+  nw: { g: number; a: number; s: number; c: number },
+): number {
+  const subs = (book.subjects || []).map((s) => s.toLowerCase().trim());
+  const genreOv = subs.length === 0 ? 0 : subs.filter((s) => favSet.has(s)).length / subs.length;
+  const subjOv = subs.length === 0 ? 0 : subs.filter((s) => userSubjectUnion.has(s)).length / subs.length;
+  const authorOv = userAuthors.has(String(book.author).toLowerCase().trim()) ? 1 : 0;
+  const k = book.key.replace(/^\//, '');
+  const collabOv = collabMap.get(k) ?? 0;
+  return nw.g * genreOv + nw.s * subjOv + nw.a * authorOv + nw.c * collabOv;
+}
+
+async function enrichFeaturedBook(
+  book: RecBook,
+  favoriteGenres: string[],
+  favSet: Set<string>,
+  subjectLabel: string,
+): Promise<{
+  key: string;
+  title: string;
+  author: string;
+  coverId: number | null | undefined;
+  description: string;
+  subjects: string[];
+  ratingsAverage: number;
+  ratingsCount: number;
+  reason: string | null;
+  matchingGenres?: string[];
+} | null> {
+  const normalizedKey = book.key.replace(/^\//, '');
+  try {
+    const detailsRes = await fetch(`https://openlibrary.org/${normalizedKey}.json`);
+    const details = await detailsRes.json();
+    const description = typeof details.description === 'string'
+      ? details.description
+      : details.description?.value || '';
+    let ratingsAverage = 0;
+    let ratingsCount = 0;
+    try {
+      const ratingsRes = await fetch(`https://openlibrary.org/${normalizedKey}/ratings.json`);
+      const ratings = await ratingsRes.json();
+      ratingsAverage = ratings.summary?.average || 0;
+      ratingsCount = ratings.summary?.count || 0;
+    } catch { /* ignore */ }
+
+    const bookSubjects = filterAndNormalizeSubjects(details.subjects || []);
+    const matchingGenres = bookSubjects.filter((s: string) =>
+      favoriteGenres.some((fg: string) => fg.toLowerCase().trim() === s.toLowerCase().trim())
+    );
+    const displaySubject = subjectLabel.replace(/_/g, ' ');
+    const reason =
+      matchingGenres.length > 0
+        ? null
+        : favoriteGenres.length > 0
+          ? `Based on your interest in ${displaySubject}`
+          : `Based on your interest in ${displaySubject}`;
+    return {
+      key: normalizedKey,
+      title: book.title,
+      author: book.author,
+      coverId: book.coverId,
+      description: description.slice(0, 500),
+      subjects: bookSubjects,
+      ratingsAverage,
+      ratingsCount,
+      reason,
+      matchingGenres: matchingGenres.length > 0 ? matchingGenres : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
 
 // ─── Featured recommendation (top pick) ───────────────────────────────
 
 recommendationsRouter.get('/featured', async (req: AuthRequest, res: Response) => {
   const userId = req.userId!;
+  const page = Math.max(0, parseInt(String(req.query.page ?? '0'), 10) || 0);
+  const pageSize = Math.min(20, Math.max(1, parseInt(String(req.query.pageSize ?? '8'), 10) || 8));
 
-  // Get user's favorite genres
   const user = db.prepare('SELECT favorite_genres FROM users WHERE id = ?').get(userId) as any;
   const favoriteGenres: string[] = JSON.parse(user?.favorite_genres || '[]');
+  const favSet = new Set(favoriteGenres.map((g: string) => g.toLowerCase().trim()));
 
-  // Get user's most-read subjects from their books
   const userBooks = db.prepare(`
-    SELECT book_key FROM reading_list
+    SELECT book_key, author FROM reading_list
     WHERE user_id = ? AND status IN ('read', 'reading')
     ORDER BY created_at DESC LIMIT 5
   `).all(userId) as any[];
 
   const excludedKeys = getUserExcludedKeys(userId);
+  const collabMap = getCollaborativeScoreMap(userId);
 
-  // Build subjects to try: favorite genres first (strong genre influence), then from read books
+  const userAuthors = new Set(
+    (db.prepare("SELECT DISTINCT lower(author) as a FROM reading_list WHERE user_id = ? AND author IS NOT NULL AND trim(author) != ''").all(userId) as any[])
+      .map((r: any) => String(r.a || '').trim())
+      .filter(Boolean),
+  );
+
   const fromBooks: string[] = [];
+  const userSubjectUnion = new Set<string>(favSet);
   for (const book of userBooks.slice(0, 3)) {
     const subjects = await getBookSubjects(book.book_key);
     const filtered = subjects.filter(
-      (s: string) => !['fiction', 'nonfiction', 'literature', 'english literature', 'fiction in english'].includes(s.toLowerCase())
+      (s: string) => !['fiction', 'nonfiction', 'literature', 'english literature', 'fiction in english'].includes(s.toLowerCase()),
     );
     fromBooks.push(...filtered.slice(0, 2));
+    for (const s of subjects) userSubjectUnion.add(s.toLowerCase().trim());
   }
   const favSlugs = favoriteGenres.slice(0, 4).map(toOLSubject);
-  const subjectsToTry = [...new Set([...favSlugs, ...fromBooks.map(toOLSubject)])];
+  let subjectsToTry = [...new Set([...favSlugs, ...fromBooks.map(toOLSubject)])];
   if (subjectsToTry.length === 0) {
-    subjectsToTry.push('fantasy', 'science_fiction', 'mystery');
+    subjectsToTry = ['fantasy', 'science_fiction', 'mystery'];
   }
 
-  const favSet = new Set(favoriteGenres.map((g: string) => g.toLowerCase().trim()));
+  const nw = normalizedRecWeights(getRecWeights());
+  const candidateMap = new Map<string, { book: RecBook; subject: string }>();
 
-  // Find best candidate: prefer books whose subjects overlap with favorite genres
   for (const subject of subjectsToTry) {
-    const books = await fetchBooksForSubject(subject, 15);
-    const withCover = books.filter(
-      (b) => !excludedKeys.has(b.key.replace(/^\//, '')) && b.coverId
-    );
-    if (withCover.length === 0) continue;
-
-    const scored = withCover.map((book) => {
-      const bookSubjects = book.subjects || [];
-      const overlap = bookSubjects.filter((s: string) => favSet.has(s.toLowerCase().trim())).length;
-      return { book, overlap };
-    });
-    scored.sort((a, b) => b.overlap - a.overlap);
-
-    for (const { book } of scored) {
-      const normalizedKey = book.key.replace(/^\//, '');
-      try {
-        const detailsRes = await fetch(`https://openlibrary.org/${normalizedKey}.json`);
-        const details = await detailsRes.json();
-        const description = typeof details.description === 'string'
-          ? details.description
-          : details.description?.value || '';
-        let ratingsAverage = 0;
-        let ratingsCount = 0;
-        try {
-          const ratingsRes = await fetch(`https://openlibrary.org/${normalizedKey}/ratings.json`);
-          const ratings = await ratingsRes.json();
-          ratingsAverage = ratings.summary?.average || 0;
-          ratingsCount = ratings.summary?.count || 0;
-        } catch { /* ignore */ }
-
-        const bookSubjects = filterAndNormalizeSubjects(details.subjects || []);
-        const matchingGenres = bookSubjects.filter((s: string) =>
-          favoriteGenres.some((fg: string) => fg.toLowerCase().trim() === s.toLowerCase().trim())
-        );
-        const displaySubject = subject.replace(/_/g, ' ');
-        const reason =
-          matchingGenres.length > 0
-            ? null
-            : favoriteGenres.length > 0
-              ? `Based on your interest in ${displaySubject}`
-              : `Based on your interest in ${displaySubject}`;
-        res.json({
-          book: {
-            key: normalizedKey,
-            title: book.title,
-            author: book.author,
-            coverId: book.coverId,
-            description: description.slice(0, 500),
-            subjects: bookSubjects,
-            ratingsAverage,
-            ratingsCount,
-            reason,
-            matchingGenres: matchingGenres.length > 0 ? matchingGenres : undefined,
-          },
-        });
-        return;
-      } catch {
-        continue;
-      }
+    const books = await fetchBooksForSubject(subject, 25);
+    for (const b of books) {
+      const nk = b.key.replace(/^\//, '');
+      if (excludedKeys.has(nk) || !b.coverId) continue;
+      if (!candidateMap.has(nk)) candidateMap.set(nk, { book: b, subject });
     }
   }
 
-  res.json({ book: null });
+  const scored = [...candidateMap.values()].map(({ book, subject }) => ({
+    book,
+    subject,
+    score: hybridFeaturedScore(book, favSet, userSubjectUnion, userAuthors, collabMap, nw),
+  }));
+  scored.sort((a, b) => b.score - a.score);
+
+  const start = page * pageSize;
+  const slice = scored.slice(start, start + pageSize);
+  const enriched = await Promise.all(
+    slice.map(({ book, subject }) => enrichFeaturedBook(book, favoriteGenres, favSet, subject)),
+  );
+  const books = enriched.filter((x): x is NonNullable<typeof x> => x != null);
+
+  res.json({
+    books,
+    page,
+    pageSize,
+    hasMore: start + pageSize < scored.length,
+  });
 });
 
 // ─── Not Interested ───────────────────────────────────────────────────

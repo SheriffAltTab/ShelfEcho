@@ -42,8 +42,13 @@ export async function getCollaborativeRecommendations(): Promise<{ books: RecBoo
   return data;
 }
 
-export async function getFeaturedRecommendation(): Promise<{ book: FeaturedBook | null }> {
-  const { data } = await apiClient.get('/recommendations/featured');
+export async function getFeaturedRecommendations(
+  page = 0,
+  pageSize = 8,
+): Promise<{ books: FeaturedBook[]; page: number; pageSize: number; hasMore: boolean }> {
+  const { data } = await apiClient.get('/recommendations/featured', {
+    params: { page, pageSize },
+  });
   return data;
 }
 

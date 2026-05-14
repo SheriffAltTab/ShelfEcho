@@ -1,9 +1,9 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Sparkles, BookOpen, Star, Users, ArrowRight, ThumbsDown,
-  ChevronRight, Loader2, RefreshCw,
+  ChevronRight, Loader2, RefreshCw, ChevronLeft,
 } from 'lucide-react';
 import { Button } from '@/shared/ui/Button';
 import { BookCard } from '@/shared/ui/BookCard';
@@ -11,7 +11,7 @@ import { getBookCoverUrl, getBookColor } from '@/shared/config';
 import { bookPath } from '@/shared/lib/bookKeys';
 import { addToReadingList } from '@/shared/lib/readingListApi';
 import {
-  getFeaturedRecommendation,
+  getFeaturedRecommendations,
   getContentBasedRecommendations,
   getCollaborativeRecommendations,
   markNotInterested,
@@ -25,7 +25,15 @@ export function DiscoverPage() {
   const navigate = useNavigate();
 
   // State
-  const [featured, setFeatured] = useState<FeaturedBook | null>(null);
+  const [featuredBooks, setFeaturedBooks] = useState<FeaturedBook[]>([]);
+  const [featuredPage, setFeaturedPage] = useState(0);
+  const [featuredHasMore, setFeaturedHasMore] = useState(false);
+  const [carouselIndex, setCarouselIndex] = useState(0);
+  const featured = featuredBooks[carouselIndex] ?? null;
+
+  useEffect(() => {
+    setCarouselIndex(0);
+  }, [featuredBooks]);
   const [featuredLoading, setFeaturedLoading] = useState(true);
   const [contentSections, setContentSections] = useState<ContentBasedSection[]>([]);
   const [contentLoading, setContentLoading] = useState(true);
@@ -34,15 +42,27 @@ export function DiscoverPage() {
   const [featuredAction, setFeaturedAction] = useState<'idle' | 'adding' | 'dismissing'>('idle');
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
 
+  const featuredPageRef = useRef(0);
+
   // Load all recommendations in parallel
-  const loadRecommendations = useCallback(() => {
+  const loadRecommendations = useCallback((bumpFeaturedPage = false) => {
     setFeaturedLoading(true);
     setContentLoading(true);
     setCollabLoading(true);
 
-    getFeaturedRecommendation()
-      .then(({ book }) => setFeatured(book))
-      .catch(() => setFeatured(null))
+    const fp = bumpFeaturedPage ? featuredPageRef.current + 1 : 0;
+    featuredPageRef.current = fp;
+    setFeaturedPage(fp);
+
+    getFeaturedRecommendations(fp, 8)
+      .then(({ books, hasMore }) => {
+        setFeaturedBooks(books);
+        setFeaturedHasMore(hasMore);
+      })
+      .catch(() => {
+        setFeaturedBooks([]);
+        setFeaturedHasMore(false);
+      })
       .finally(() => setFeaturedLoading(false));
 
     getContentBasedRecommendations()
@@ -74,8 +94,8 @@ export function DiscoverPage() {
       );
       // Refresh featured to get a new book
       setFeaturedLoading(true);
-      const { book } = await getFeaturedRecommendation();
-      setFeatured(book);
+      const { books } = await getFeaturedRecommendations(featuredPageRef.current, 8);
+      setFeaturedBooks(books);
     } catch { /* ignore */ }
     setFeaturedAction('idle');
     setFeaturedLoading(false);
@@ -93,8 +113,8 @@ export function DiscoverPage() {
       );
       // Refresh featured
       setFeaturedLoading(true);
-      const { book } = await getFeaturedRecommendation();
-      setFeatured(book);
+      const { books } = await getFeaturedRecommendations(featuredPageRef.current, 8);
+      setFeaturedBooks(books);
     } catch { /* ignore */ }
     setFeaturedAction('idle');
     setFeaturedLoading(false);
@@ -109,13 +129,17 @@ export function DiscoverPage() {
             <Sparkles className="text-amber" size={28} />
             Discover
           </h1>
-          <p className="text-brown/60 mt-1">Personalized recommendations just for you</p>
+          <p className="text-brown/60 mt-1">
+            Personalized recommendations just for you
+            <span className="ml-2 text-xs text-brown/40">(set #{featuredPage + 1})</span>
+          </p>
         </div>
         <Button
           variant="ghost"
           size="sm"
           leftIcon={<RefreshCw size={14} />}
-          onClick={loadRecommendations}
+          onClick={() => loadRecommendations(true)}
+          title={featuredHasMore ? 'Load the next set of recommendations' : 'Reload recommendations (next set when available)'}
         >
           Refresh
         </Button>
@@ -143,8 +167,28 @@ export function DiscoverPage() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.4 }}
-            className="bg-white rounded-3xl shadow-warm border border-brown/5 overflow-hidden"
+            className="bg-white rounded-3xl shadow-warm border border-brown/5 overflow-hidden relative"
           >
+            {featuredBooks.length > 1 && (
+              <>
+                <button
+                  type="button"
+                  aria-label="Previous recommendation"
+                  className="absolute left-2 top-1/2 -translate-y-1/2 z-10 p-2 rounded-full bg-white/90 shadow border border-brown/10 text-brown hover:bg-cream transition"
+                  onClick={() => setCarouselIndex((i) => (i - 1 + featuredBooks.length) % featuredBooks.length)}
+                >
+                  <ChevronLeft size={22} />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Next recommendation"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 z-10 p-2 rounded-full bg-white/90 shadow border border-brown/10 text-brown hover:bg-cream transition"
+                  onClick={() => setCarouselIndex((i) => (i + 1) % featuredBooks.length)}
+                >
+                  <ChevronRight size={22} />
+                </button>
+              </>
+            )}
             <div className="flex flex-col md:flex-row">
               {/* Cover */}
               <div className="md:w-72 lg:w-80 flex-shrink-0 relative">
@@ -258,6 +302,19 @@ export function DiscoverPage() {
                 </div>
               </div>
             </div>
+            {featuredBooks.length > 1 && (
+              <div className="flex justify-center gap-2 py-3 border-t border-brown/5 bg-cream/30">
+                {featuredBooks.map((_, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    aria-label={`Go to recommendation ${i + 1}`}
+                    className={`h-2 rounded-full transition-all ${i === carouselIndex ? 'w-8 bg-amber' : 'w-2 bg-brown/25 hover:bg-brown/40'}`}
+                    onClick={() => setCarouselIndex(i)}
+                  />
+                ))}
+              </div>
+            )}
           </motion.div>
         ) : (
           <motion.div

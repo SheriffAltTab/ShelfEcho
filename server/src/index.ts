@@ -12,6 +12,7 @@ import { userRouter } from './routes/user.js';
 import { uploadRouter } from './routes/upload.js';
 import { recommendationsRouter } from './routes/recommendations.js';
 import { adminRouter } from './routes/admin.js';
+import { quotesRouter } from './routes/quotes.js';
 
 import 'dotenv/config';
 
@@ -22,7 +23,8 @@ const PORT = Number(process.env.PORT) || 3001;
 const HOST = process.env.HOST || '0.0.0.0';
 
 const allowedOrigins = [
-  'https://shelfecho.vercel.app',
+  'https://shelfecho.site',
+  'https://www.shelfecho.site',
   'http://localhost:5173',
   'http://127.0.0.1:5173',
 ];
@@ -44,6 +46,7 @@ app.use('/api/user', userRouter);
 app.use('/api/upload', uploadRouter);
 app.use('/api/recommendations', recommendationsRouter);
 app.use('/api/admin', adminRouter);
+app.use('/api/quotes', quotesRouter);
 
 app.listen(PORT, HOST, () => {
   console.log(`ShelfEcho server running on http://${HOST}:${PORT}`);

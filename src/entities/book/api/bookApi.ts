@@ -18,6 +18,16 @@ export async function getTrendingBooks(): Promise<{ books: Book[] }> {
   return data;
 }
 
+export async function getPopularNowBooks(): Promise<{ books: Book[] }> {
+  const { data } = await apiClient.get('/books/popular-now');
+  return data;
+}
+
+export async function getDailyQuote(): Promise<{ quote: string; author: string }> {
+  const { data } = await apiClient.get('/quotes/daily');
+  return data;
+}
+
 export async function getBooksBySubject(subject: string, limit = 10): Promise<{ books: Book[]; name: string }> {
   const { data } = await apiClient.get(`/books/subject/${subject}`, { params: { limit } });
   return data;

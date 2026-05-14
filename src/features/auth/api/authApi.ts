@@ -6,6 +6,10 @@ interface AuthResponse {
   user: User;
 }
 
+export type RegisterResult =
+  | { needsVerification: true; message: string }
+  | { needsVerification: false; token: string; user: User };
+
 function validateAuthResponse(data: unknown): AuthResponse {
   if (
     data &&
@@ -18,7 +22,7 @@ function validateAuthResponse(data: unknown): AuthResponse {
   ) {
     return data as AuthResponse;
   }
-  throw new Error('Сервер повернув некоректну відповідь. Можливо, бекенд тимчасово недоступний.');
+  throw new Error('Invalid response from server. The API may be temporarily unavailable.');
 }
 
 export async function login(email: string, password: string): Promise<AuthResponse> {
@@ -26,9 +30,23 @@ export async function login(email: string, password: string): Promise<AuthRespon
   return validateAuthResponse(data);
 }
 
-export async function register(name: string, email: string, password: string): Promise<AuthResponse> {
-  const { data } = await apiClient.post('/auth/register', { name, email, password });
-  return validateAuthResponse(data);
+export async function register(name: string, email: string, password: string): Promise<RegisterResult> {
+  const { data, status } = await apiClient.post('/auth/register', { name, email, password });
+  if (
+    status === 201 &&
+    data &&
+    typeof data === 'object' &&
+    'needsVerification' in data &&
+    (data as { needsVerification?: boolean }).needsVerification === true
+  ) {
+    const message =
+      'message' in data && typeof (data as { message?: unknown }).message === 'string'
+        ? (data as { message: string }).message
+        : 'Check your email to verify your account.';
+    return { needsVerification: true, message };
+  }
+  const auth = validateAuthResponse(data);
+  return { needsVerification: false, token: auth.token, user: auth.user };
 }
 
 function validateUser(data: unknown): User {
@@ -58,6 +76,21 @@ export async function getMe(): Promise<{ user: User }> {
 
 export async function completeOnboarding(favoriteGenres: string[], readingGoal: number): Promise<void> {
   await apiClient.put('/user/onboard', { favoriteGenres, readingGoal });
+}
+
+/** Full URL to start Google OAuth (browser redirect). */
+export function getGoogleAuthStartUrl(): string {
+  const raw =
+    typeof import.meta.env.VITE_API_URL === 'string' && import.meta.env.VITE_API_URL
+      ? import.meta.env.VITE_API_URL.replace(/\/$/, '')
+      : '';
+  if (raw) {
+    return raw.endsWith('/api') ? `${raw}/auth/google` : `${raw}/api/auth/google`;
+  }
+  if (typeof window !== 'undefined') {
+    return `${window.location.origin}/api/auth/google`;
+  }
+  return '/api/auth/google';
 }
 
 export async function getUserStats(): Promise<{

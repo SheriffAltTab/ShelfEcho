@@ -207,6 +207,52 @@ booksRouter.get('/subject/:subject', async (req, res) => {
   }
 });
 
+// Popular books from recent reading_list + favorites activity (last 30 days)
+booksRouter.get('/popular-now', authMiddleware, (req: AuthRequest, res: Response) => {
+  try {
+    const rows = db.prepare(`
+      WITH rl AS (
+        SELECT book_key, title, author, cover_id, COUNT(*) AS n
+        FROM reading_list
+        WHERE datetime(created_at) >= datetime('now', '-30 days')
+        GROUP BY book_key
+      ),
+      fv AS (
+        SELECT book_key, title, author, cover_id, COUNT(*) AS n
+        FROM favorites
+        WHERE datetime(created_at) >= datetime('now', '-30 days')
+        GROUP BY book_key
+      ),
+      merged AS (
+        SELECT book_key, title, author, cover_id, n FROM rl
+        UNION ALL
+        SELECT book_key, title, author, cover_id, n FROM fv
+      )
+      SELECT book_key, MAX(title) AS title, MAX(author) AS author, MAX(cover_id) AS cover_id, SUM(n) AS interactions
+      FROM merged
+      GROUP BY book_key
+      ORDER BY interactions DESC
+      LIMIT 20
+    `).all() as any[];
+
+    const books = rows.map((r) => ({
+      key: String(r.book_key).replace(/^\//, ''),
+      title: r.title || 'Unknown',
+      author: r.author || 'Unknown Author',
+      coverId: r.cover_id ?? null,
+      subjects: [] as string[],
+      ratingsAverage: 0,
+      editionCount: 0,
+      pageCount: 0,
+    }));
+
+    res.json({ books });
+  } catch (e) {
+    console.error('popular-now error', e);
+    res.json({ books: [] });
+  }
+});
+
 // Get author info + their books from OpenLibrary
 booksRouter.get('/author-info', async (req: AuthRequest, res: Response) => {
   const authorKey = req.query.key as string;

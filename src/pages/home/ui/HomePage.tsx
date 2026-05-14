@@ -1,15 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { ArrowRight, Flame, Quote } from 'lucide-react';
 import { Button } from '@/shared/ui/Button';
 import { BookCard } from '@/shared/ui/BookCard';
 import { Link, useNavigate } from 'react-router-dom';
-import { getTrendingBooks, getBooksBySubject } from '@/entities/book/api/bookApi';
+import { getTrendingBooks, getBooksBySubject, getPopularNowBooks, getDailyQuote } from '@/entities/book/api/bookApi';
 import type { Book } from '@/entities/book/model/types';
 import { getBookColor, getBookCoverUrl } from '@/shared/config';
 import { useAuth } from '@/features/auth/model/authContext';
 import { getReadingList } from '@/shared/lib/readingListApi';
 import type { ReadingListItem } from '@/entities/book/model/types';
 import { bookPath } from '@/shared/lib/bookKeys';
+import { getAllSelectableGenres } from '@/shared/config/genreHierarchy';
 
 interface ShelfData {
   title: string;
@@ -18,65 +19,103 @@ interface ShelfData {
   loaded: boolean;
 }
 
+function genreToSubjectSlug(g: string): string {
+  return g.toLowerCase().trim().replace(/\s+/g, '_');
+}
+
 export function HomePage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const [popularBooks, setPopularBooks] = useState<Book[]>([]);
   const [trendingBooks, setTrendingBooks] = useState<Book[]>([]);
   const [trendingLoaded, setTrendingLoaded] = useState(false);
-  const [shelves, setShelves] = useState<ShelfData[]>([
-    { title: 'Fantasy Adventures', subject: 'fantasy', books: [], loaded: false },
-    { title: 'Mystery & Thriller', subject: 'mystery', books: [], loaded: false },
-  ]);
+  const [shelves, setShelves] = useState<ShelfData[]>([]);
   const [currentlyReading, setCurrentlyReading] = useState<ReadingListItem[]>([]);
+  const [dailyQuote, setDailyQuote] = useState<{ quote: string; author: string } | null>(null);
 
-  // Load trending first (fastest), then subjects one-by-one
+  const displayPopular = popularBooks.length > 0;
+  const heroBooks = displayPopular ? popularBooks : trendingBooks;
+  const heroBook = heroBooks[0];
+
+  const shelfDefinitions = useMemo(() => {
+    const fav = (user?.favoriteGenres ?? []).filter(Boolean);
+    const favLower = new Set(fav.map((g) => g.toLowerCase().trim()));
+    const favoritePart: ShelfData[] = (fav.length > 0 ? fav.slice(0, 4) : ['Fantasy', 'Mystery and detective stories']).map((g) => ({
+      title: fav.length > 0 ? g : g === 'Fantasy' ? 'Fantasy Adventures' : 'Mystery & Thriller',
+      subject: genreToSubjectSlug(g),
+      books: [],
+      loaded: false,
+    }));
+
+    const allGenres = getAllSelectableGenres();
+    const discoveryTitles = allGenres
+      .filter((g) => !favLower.has(g.toLowerCase().trim()))
+      .filter((g) => !['Fiction', 'Literature', 'Nonfiction'].includes(g))
+      .slice(0, 6);
+
+    const discoveryPart: ShelfData[] = discoveryTitles.slice(0, 3).map((g) => ({
+      title: `Explore ${g}`,
+      subject: genreToSubjectSlug(g),
+      books: [],
+      loaded: false,
+    }));
+
+    return [...favoritePart, ...discoveryPart];
+  }, [user?.favoriteGenres]);
+
+  const loadSubjectsRef = useRef(new Set<string>());
+
   useEffect(() => {
-    // Load trending + reading list in parallel
+    setShelves(shelfDefinitions);
+    loadSubjectsRef.current.clear();
+  }, [shelfDefinitions]);
+
+  useEffect(() => {
     Promise.allSettled([
+      getPopularNowBooks(),
       getTrendingBooks(),
       getReadingList('reading'),
-    ]).then(([trending, reading]) => {
+      getDailyQuote(),
+    ]).then(([popular, trending, reading, quote]) => {
+      if (popular.status === 'fulfilled' && popular.value.books?.length) {
+        setPopularBooks(popular.value.books.slice(0, 12));
+      } else {
+        setPopularBooks([]);
+      }
       if (trending.status === 'fulfilled') {
         setTrendingBooks(trending.value.books.slice(0, 8));
-        setTrendingLoaded(true);
-      } else {
-        setTrendingLoaded(true);
       }
       if (reading.status === 'fulfilled') setCurrentlyReading(reading.value.books.slice(0, 3));
+      if (quote.status === 'fulfilled') setDailyQuote(quote.value);
+      setTrendingLoaded(true);
     });
   }, []);
 
-  // Load subjects incrementally after trending
   useEffect(() => {
     if (!trendingLoaded) return;
 
-    shelves.forEach((shelf, idx) => {
-      if (shelf.loaded) return;
+    shelfDefinitions.forEach((shelf) => {
+      if (loadSubjectsRef.current.has(shelf.subject)) return;
+      loadSubjectsRef.current.add(shelf.subject);
       getBooksBySubject(shelf.subject, 8)
         .then(({ books }) => {
-          setShelves((prev) => {
-            const next = [...prev];
-            next[idx] = { ...next[idx], books: books.slice(0, 8), loaded: true };
-            return next;
-          });
+          setShelves((prev) => prev.map((s) => (
+            s.subject === shelf.subject ? { ...s, books: books.slice(0, 8), loaded: true } : s
+          )));
         })
         .catch(() => {
-          setShelves((prev) => {
-            const next = [...prev];
-            next[idx] = { ...next[idx], loaded: true };
-            return next;
-          });
+          setShelves((prev) => prev.map((s) => (
+            s.subject === shelf.subject ? { ...s, loaded: true } : s
+          )));
         });
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trendingLoaded]);
+  }, [trendingLoaded, shelfDefinitions]);
 
-  const featuredBook = trendingBooks[0];
+  const popularRowBooks = displayPopular ? popularBooks.slice(0, 8) : trendingBooks;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
       <div className="lg:col-span-8 space-y-12">
-        {/* Hero — trending */}
         {!trendingLoaded ? (
           <div className="flex items-center justify-center py-24">
             <div className="text-center">
@@ -84,20 +123,20 @@ export function HomePage() {
               <p className="text-brown/60 font-serif text-lg">Loading your bookshelf...</p>
             </div>
           </div>
-        ) : featuredBook ? (
+        ) : heroBook ? (
           <section className="relative bg-cream rounded-3xl p-8 sm:p-12 overflow-hidden shadow-warm border border-white/50">
             <div className="absolute top-0 right-0 w-64 h-64 bg-amber/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
             <div className="relative z-10 flex flex-col sm:flex-row gap-8 items-center">
               <div className="flex-1 space-y-6 text-center sm:text-left">
                 <span className="inline-block px-3 py-1 bg-rose/20 text-brown-dark rounded-full text-sm font-serif italic">
-                  Trending Today
+                  {displayPopular ? 'Popular Now' : 'Trending Today'}
                 </span>
                 <h1 className="text-4xl sm:text-5xl font-serif font-bold text-brown leading-tight">
-                  {featuredBook.title}
+                  {heroBook.title}
                 </h1>
-                <p className="text-lg text-brown/70">by {featuredBook.author}</p>
+                <p className="text-lg text-brown/70">by {heroBook.author}</p>
                 <div className="flex gap-4 justify-center sm:justify-start">
-                  <Button variant="wood" size="lg" onClick={() => navigate(bookPath(featuredBook.key))}>
+                  <Button variant="wood" size="lg" onClick={() => navigate(bookPath(heroBook.key))}>
                     Pick This Up
                   </Button>
                 </div>
@@ -105,28 +144,29 @@ export function HomePage() {
               <div className="flex-shrink-0 relative group">
                 <div className="absolute inset-0 bg-amber/20 blur-xl rounded-full transform group-hover:scale-110 transition-transform duration-500" />
                 <BookCard
-                  title={featuredBook.title}
-                  author={featuredBook.author}
-                  coverId={featuredBook.coverId}
-                  coverColor={getBookColor(featuredBook.key)}
+                  title={heroBook.title}
+                  author={heroBook.author}
+                  coverId={heroBook.coverId}
+                  coverColor={getBookColor(heroBook.key)}
                   className="w-48 sm:w-56 transform rotate-3 group-hover:rotate-0 transition-all duration-500"
-                  onClick={() => navigate(bookPath(featuredBook.key))}
+                  onClick={() => navigate(bookPath(heroBook.key))}
                 />
               </div>
             </div>
           </section>
         ) : null}
 
-        {/* Trending shelf */}
-        {trendingBooks.length > 0 && (
+        {popularRowBooks.length > 0 && (
           <section className="space-y-6">
             <div className="flex justify-between items-end border-b border-brown/10 pb-2">
-              <h2 className="text-2xl font-serif font-bold text-brown">Trending Now</h2>
+              <h2 className="text-2xl font-serif font-bold text-brown">
+                {displayPopular ? 'Popular on ShelfEcho' : 'Trending Now'}
+              </h2>
               <Button
                 variant="ghost"
                 size="sm"
                 rightIcon={<ArrowRight size={14} />}
-                onClick={() => navigate('/search?q=trending')}
+                onClick={() => navigate(displayPopular ? '/discover' : '/search?q=trending')}
               >
                 View All
               </Button>
@@ -135,7 +175,7 @@ export function HomePage() {
               <div className="absolute bottom-0 left-0 right-0 h-4 bg-[#8B5E3C] rounded-sm shadow-md translate-y-2 z-0" />
               <div className="absolute bottom-0 left-0 right-0 h-1 bg-[#6d4a2f] translate-y-2 z-10 opacity-50" />
               <div className="flex gap-6 overflow-x-auto pb-8 pt-4 px-2 scrollbar-hide relative z-20">
-                {trendingBooks.map((book) => (
+                {popularRowBooks.map((book) => (
                   <BookCard
                     key={book.key}
                     title={book.title}
@@ -151,9 +191,8 @@ export function HomePage() {
           </section>
         )}
 
-        {/* Subject shelves — load incrementally */}
         {shelves.map((shelf) => (
-          <section key={shelf.subject} className="space-y-6">
+          <section key={`${shelf.subject}-${shelf.title}`} className="space-y-6">
             <div className="flex justify-between items-end border-b border-brown/10 pb-2">
               <h2 className="text-2xl font-serif font-bold text-brown">{shelf.title}</h2>
               <Button
@@ -193,7 +232,6 @@ export function HomePage() {
         ))}
       </div>
 
-      {/* Right Sidebar */}
       <div className="lg:col-span-4 space-y-8">
         {currentlyReading.length > 0 && (
           <div className="bg-white p-6 rounded-2xl shadow-warm border border-brown/5">
@@ -244,9 +282,9 @@ export function HomePage() {
           <Quote className="absolute top-4 left-4 text-teal/20 w-12 h-12 transform -scale-x-100" />
           <div className="relative z-10 pt-4">
             <p className="font-serif italic text-lg text-brown/80 mb-4 leading-relaxed">
-              "A reader lives a thousand lives before he dies. The man who never reads lives only one."
+              &ldquo;{dailyQuote?.quote ?? 'Loading quote…'}&rdquo;
             </p>
-            <p className="text-sm font-bold text-teal-800">— George R.R. Martin</p>
+            <p className="text-sm font-bold text-teal-800">— {dailyQuote?.author ?? '…'}</p>
           </div>
         </div>
       </div>

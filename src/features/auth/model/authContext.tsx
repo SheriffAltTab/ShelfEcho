@@ -7,10 +7,10 @@ interface AuthContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (name: string, email: string, password: string) => Promise<void>;
+  register: (name: string, email: string, password: string) => Promise<{ needsVerification: boolean; message?: string }>;
   logout: () => void;
   completeOnboarding: (genres: string[], goal: number) => Promise<void>;
-  refreshUser: () => Promise<void>;
+  refreshUser: () => Promise<User | null>;
   updateUser: (updates: Partial<User>) => void;
 }
 
@@ -20,19 +20,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const refreshUser = useCallback(async () => {
+  const refreshUser = useCallback(async (): Promise<User | null> => {
     const token = localStorage.getItem('shelfecho_token');
     if (!token) {
       setUser(null);
       setIsLoading(false);
-      return;
+      return null;
     }
     try {
       const { user } = await authApi.getMe();
       setUser(user);
+      return user;
     } catch {
       localStorage.removeItem('shelfecho_token');
       setUser(null);
+      return null;
     } finally {
       setIsLoading(false);
     }
@@ -49,9 +51,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const register = async (name: string, email: string, password: string) => {
-    const { token, user } = await authApi.register(name, email, password);
-    localStorage.setItem('shelfecho_token', token);
-    setUser(user);
+    const result = await authApi.register(name, email, password);
+    if (result.needsVerification) {
+      return { needsVerification: true as const, message: result.message };
+    }
+    localStorage.setItem('shelfecho_token', result.token);
+    setUser(result.user);
+    return { needsVerification: false as const };
   };
 
   const logout = () => {

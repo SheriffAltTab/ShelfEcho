@@ -104,8 +104,24 @@ export function initDB() {
   if (!userColNames.includes('blocked')) {
     db.exec('ALTER TABLE users ADD COLUMN blocked INTEGER DEFAULT 0');
   }
-
-  // Comments migrations
+  if (!userColNames.includes('is_active')) {
+    db.exec('ALTER TABLE users ADD COLUMN is_active INTEGER DEFAULT 1');
+  }
+  if (!userColNames.includes('email_verification_token')) {
+    db.exec('ALTER TABLE users ADD COLUMN email_verification_token TEXT');
+  }
+  if (!userColNames.includes('email_verification_expires')) {
+    db.exec('ALTER TABLE users ADD COLUMN email_verification_expires TEXT');
+  }
+  if (!userColNames.includes('password_reset_token')) {
+    db.exec('ALTER TABLE users ADD COLUMN password_reset_token TEXT');
+  }
+  if (!userColNames.includes('password_reset_expires')) {
+    db.exec('ALTER TABLE users ADD COLUMN password_reset_expires TEXT');
+  }
+  if (!userColNames.includes('google_id')) {
+    db.exec('ALTER TABLE users ADD COLUMN google_id TEXT');
+  }
   const commentCols = db.prepare("PRAGMA table_info(comments)").all() as any[];
   const commentColNames = commentCols.map((c: any) => c.name);
   if (!commentColNames.includes('has_spoiler')) {

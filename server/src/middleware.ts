@@ -24,9 +24,13 @@ export function authMiddleware(req: AuthRequest, res: Response, next: NextFuncti
     req.userId = decoded.userId;
 
     // Check if user is blocked
-    const user = db.prepare('SELECT role, blocked FROM users WHERE id = ?').get(decoded.userId) as any;
+    const user = db.prepare('SELECT role, blocked, is_active FROM users WHERE id = ?').get(decoded.userId) as any;
     if (user?.blocked) {
       res.status(403).json({ error: 'Account is blocked' });
+      return;
+    }
+    if (user && Number(user.is_active) === 0) {
+      res.status(403).json({ error: 'Please verify your email address before continuing.' });
       return;
     }
     req.userRole = (user?.role || 'user') as UserRole;

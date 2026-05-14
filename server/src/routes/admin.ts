@@ -172,6 +172,13 @@ adminRouter.get('/moderation/reports', roleMiddleware('superadmin', 'moderator')
 // ─── User Management ──────────────────────────────────────────────────
 // Access: superadmin, moderator
 
+adminRouter.get('/users', roleMiddleware('superadmin', 'moderator'), (_req: AuthRequest, res: Response) => {
+  const users = db.prepare(
+    'SELECT id, name, email, avatar, role, blocked, created_at FROM users ORDER BY id ASC',
+  ).all();
+  res.json({ users });
+});
+
 adminRouter.get('/users/search', roleMiddleware('superadmin', 'moderator'), (req: AuthRequest, res: Response) => {
   const q = req.query.q as string;
   if (!q) { res.status(400).json({ error: 'q is required' }); return; }

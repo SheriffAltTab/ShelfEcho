@@ -1,5 +1,9 @@
 name: Deploy ShelfEcho
 
+# Example: deploy to an EC2 (or other) host over SSH — API + SQLite on the same machine.
+# For a split layout, replace the remote script with: build frontend → aws s3 sync dist/ … → aws cloudfront create-invalidation …,
+# and run the API separately on ECS/Fargate or another EC2 with the same env/secrets.
+
 on:
   push:
     branches: [ master ]
@@ -8,7 +12,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy to AWS via SSH
+      - name: Deploy via SSH (AWS EC2-style host)
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.HOST }}
@@ -24,11 +28,9 @@ jobs:
             
             echo "VITE_API_URL=https://shelfecho.site/api" > .env
             
-            # 1. Збірка Фронтенду
             npm install
             npm run build
             
-            # 2. Збірка Бекенду
             cd server
             npm install
             npm run build

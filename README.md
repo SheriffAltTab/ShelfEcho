@@ -1,244 +1,209 @@
 # ShelfEcho
 
-**ShelfEcho** — веб-додаток для ведення особистої бібліотеки, списків читання, відгуків та рекомендацій книг. Користувачі реєструються, обирають улюблені жанри, додають книги в «Читаю» / «Хочу прочитати» / «Прочитано», залишають коментарі та рейтинги, отримують персональні рекомендації. Для адміністраторів є панель зі статистикою, модерацією коментарів та налаштуваннями системи.
+**ShelfEcho** is a web app for a personal library, reading lists, reviews, and book recommendations. Users sign up, pick favourite genres, manage **Want to read** / **Reading** / **Read**, leave one rating and comment per book, and get personalised recommendations. Administrators get a panel with statistics, comment moderation, user management, and recommendation weight tuning.
 
-**Сайт задеплоєний через AWS.**  
-**Домен:** [shelfecho.site](https://shelfecho.site)
-
----
-
-## Зміст
-
-- [Стек технологій](#стек-технологій)
-- [Логіка системи](#логіка-системи)
-- [Ієрархія файлів](#ієрархія-файлів)
-- [Розробка](#розробка)
-- [Деплой](#деплой)
+**Production:** AWS-hosted static frontend and Node API.  
+**Site:** [shelfecho.site](https://shelfecho.site)
 
 ---
 
-## Стек технологій
+## Table of contents
 
-### Frontend (корінь проєкту)
+- [Stack](#stack)
+- [How it works](#how-it-works)
+- [Hybrid recommendations](#hybrid-recommendations)
+- [Authentication](#authentication)
+- [Admin panel](#admin-panel)
+- [Repository layout](#repository-layout)
+- [Database](#database)
+- [Local development](#local-development)
+- [Environment variables](#environment-variables)
+- [Deployment on AWS](#deployment-on-aws)
+- [API overview](#api-overview)
+- [License](#license)
 
-| Технологія | Призначення |
-|------------|-------------|
-| **React 19** | UI та компонентна модель |
-| **TypeScript** | Типізація |
-| **Vite 7** | Збірка, dev-сервер, HMR |
-| **React Router 7** | Маршрутизація (SPA) |
-| **Tailwind CSS 4** | Стилі (utility-first) |
-| **Axios** | HTTP-клієнт до API |
-| **Framer Motion** | Анімації |
-| **Recharts** | Графіки (адмінка, статистика) |
-| **Lucide React** | Іконки |
+---
+
+## Stack
+
+### Frontend (repository root)
+
+| Technology | Role |
+|------------|------|
+| **React 19** | UI |
+| **TypeScript** | Typing |
+| **Vite 7** | Build and dev server |
+| **React Router 7** | SPA routing |
+| **Tailwind CSS 4** | Styling |
+| **Axios** | HTTP client |
+| **Framer Motion** | Animations |
+| **Recharts** | Admin charts |
+| **Lucide React** | Icons |
 
 ### Backend (`server/`)
 
-| Технологія | Призначення |
-|------------|-------------|
-| **Node.js** | Середовище виконання |
+| Technology | Role |
+|------------|------|
+| **Node.js** | Runtime |
 | **Express 5** | HTTP API |
-| **TypeScript** | Типізація |
-| **better-sqlite3** | База даних SQLite |
-| **bcryptjs** | Хешування паролів |
-| **jsonwebtoken** | JWT для авторизації |
-| **multer** | Завантаження файлів (аватарки) |
-| **cors** | CORS для запитів з фронту |
-| **dotenv** | Змінні середовища |
+| **TypeScript** | Typing |
+| **better-sqlite3** | SQLite database |
+| **bcryptjs** | Password hashing |
+| **jsonwebtoken** | JWT sessions |
+| **multer** | Avatar uploads |
+| **nodemailer** | Transactional email (e.g. AWS SES SMTP) |
+| **cors**, **dotenv** | CORS and configuration |
 
-### Зовнішні джерела даних
+### External data
 
-- **Open Library API** — пошук книг, обкладинки, опис, автор, жанри (subjects). Використовується тільки на бекенді; фронт отримує вже оброблені дані через власне API.
-
----
-
-## Логіка системи
-
-### Авторизація та користувачі
-
-- **Реєстрація / вхід** — email + пароль; пароль зберігається як bcrypt-хеш. Після успішної реєстрації користувач потрапляє на **онбординг** (вибір улюблених жанрів та цілі читання на рік).
-- **JWT** — після логіну/реєстрації сервер повертає токен; фронт зберігає його в `localStorage` і додає в заголовок `Authorization` для захищених запитів.
-- **Ролі** — у БД є поле `role`: `user`, `moderator`, `content_manager`, `superadmin`. Перший зареєстрований користувач автоматично стає `superadmin`. Доступ до адмін-панелі перевіряється на бекенді та на фронті (приховані маршрути/меню).
-
-### Книги
-
-- Книги **не зберігаються в БД** як каталог. Дані беруться з **Open Library** (пошук, деталі книги, автор, тренди, за жанром). Бекенд кешує лише `subjects` (жанри) для книг у списку читання в таблиці `subjects_cache`.
-- Користувач може: шукати книги, переглядати сторінку книги, додавати в обране, в список читання (статуси: «Хочу прочитати», «Читаю», «Прочитано» з прогресом і рейтингом), залишати один коментар і рейтинг на книгу, позначати «Не цікаво» для рекомендацій.
-
-### Списки та коментарі
-
-- **Favorites** — улюблені книги (таблиця `favorites`).
-- **Reading list** — список читання зі статусами, прогресом (сторінки), рейтингом (таблиця `reading_list`).
-- **Comments** — один коментар на користувача на книгу; підтримка позначки «спойлер» (`has_spoiler`), модерація (статус `pending` / `approved`), скарги (таблиця `comment_reports`).
-- **Not interested** — книги, від яких користувач відмовився для рекомендацій.
-
-### Рекомендації
-
-- Рекомендації будуються на бекенді на основі: жанрів користувача, авторів з прочитаних книг, subjects з Open Library, налаштувань ваг у таблиці `settings` (ключ `rec_weights`). Адмін може змінювати ваги через панель.
-
-### Адмін-панель
-
-- Доступна лише для ролей з достатніми правами (перевірка на бекенді).
-- Функції: статистика (користувачі, реєстрації, коментарі), модерація коментарів (черга на схвалення, спойлери, скарги), управління користувачами (блокування, ролі), налаштування ваг рекомендацій, аналітика пошуку (таблиця `search_logs`), нульові результати пошуку.
-
-### Пошук та аналітика
-
-- Пошук книг виконується через Open Library; запити та кількість результатів логуються в `search_logs` (опційно з `user_id`). Використовується для аналітики та покращення підказок.
+- **Open Library** — search, covers, work/edition metadata, subjects. Used only on the server; the browser talks to ShelfEcho’s own API.
 
 ---
 
-## Ієрархія файлів
+## How it works
 
-Структура наближена до **Feature-Sliced Design**: розділення на шари за типами модулів та аліаси імпортів `@/...`.
+### Books
+
+Books are **not** stored as a full catalogue in SQLite. Metadata comes from Open Library; the app stores user-specific rows (favourites, reading list, comments, “not interested”) and caches **subjects** per book key in `subjects_cache`.
+
+### Lists and social
+
+- **Favorites** — `favorites`
+- **Reading list** — `reading_list` (status, progress, pages, rating, subjects JSON)
+- **Comments** — one per user per book; spoiler flag, moderation status, **comment_reports**
+- **Not interested** — excluded from recommendation pools where applicable
+
+### Search analytics
+
+Search queries can be logged to `search_logs` for admin analytics.
+
+---
+
+## Hybrid recommendations
+
+Admin-tunable weights live in `settings` under the key **`rec_weights`** (JSON). The engine reads them via `getRecWeights()` / `normalizedRecWeights()` and combines normalised partial scores (genre overlap, subject overlap, author similarity, collaborative signal) into a **weighted sum**, then sorts candidates.
+
+Featured / discover-style feeds support **pagination** (`page`, `pageSize`) so the client can load carousel “pages” without repeating the same slice.
+
+---
+
+## Authentication
+
+- **Email + password** — register creates an **inactive** account until the user opens the verification link (`/verify-email?token=…` → `GET /api/auth/verify-email`). No JWT is issued until the account is active.
+- **Login** — rejected with a clear message if the email is not verified yet (`is_active = 0`) or the user is blocked.
+- **Google** — `GET /api/auth/google` redirects to Google; `GET /api/auth/google/callback` exchanges the code, creates or links the user, then redirects to **`FRONTEND_URL/auth/callback#token=…`**
+- **Forgot password** — `POST /api/auth/forgot-password`; **reset** — `POST /api/auth/reset-password` with `token` and `newPassword`.
+- **JWT** — stored in `localStorage` as `shelfecho_token` and sent as `Authorization: Bearer …` on protected routes.
+
+Configure **SMTP** (e.g. Amazon SES SMTP) and **Google OAuth** using `server/.env.example` as a checklist.
+
+---
+
+## Admin panel
+
+Available only to elevated roles (enforced on the server and reflected in the UI).
+
+- Dashboard statistics  
+- Comment moderation (reports, delete, spoiler handling)  
+- **Users** list (`GET /api/admin/users`) with client-side search; ban / role controls  
+- Recommendation weight sliders (`PUT /api/admin/rec-weights`)  
+- Search analytics  
+
+---
+
+## Repository layout
 
 ```
 ShelfEcho/
-├── index.html
-├── package.json              # Фронт: залежності, скрипти (dev, build, lint)
-├── vite.config.ts            # Vite: alias @ → src, proxy /api, /uploads на бекенд
-├── tsconfig.json / tsconfig.app.json
-├── vercel.json               # Rewrites для SPA на Vercel (якщо використовується)
-│
-├── src/                      # Frontend
-│   ├── main.tsx              # Точка входу, рендер App
-│   ├── app/
-│   │   ├── App.tsx           # AuthProvider + AppRouter
-│   │   └── routes/
-│   │       └── AppRouter.tsx # Маршрути, ProtectedRoute, AuthRoute, OnboardingRoute
-│   │
-│   ├── pages/                # Сторінки (одна сторінка — один маршрут)
-│   │   ├── auth/ui/AuthPage.tsx
-│   │   ├── onboarding/ui/OnboardingPage.tsx
-│   │   ├── home/ui/HomePage.tsx
-│   │   ├── book-details/ui/BookDetailsPage.tsx
-│   │   ├── my-books/ui/MyBooksPage.tsx
-│   │   ├── profile/ui/ProfilePage.tsx
-│   │   ├── search/ui/SearchPage.tsx
-│   │   ├── discover/ui/DiscoverPage.tsx
-│   │   ├── author/ui/AuthorPage.tsx
-│   │   ├── user-profile/ui/UserProfilePage.tsx
-│   │   └── admin/ui/AdminPage.tsx
-│   │
-│   ├── features/             # Фічі з власним станом/API
-│   │   └── auth/
-│   │       ├── api/authApi.ts
-│   │       └── model/authContext.tsx
-│   │
-│   ├── entities/             # Бізнес-сутності (типи, базові дані)
-│   │   └── user/model/types.ts
-│   │
-│   ├── shared/               # Спільний код
-│   │   ├── api/apiClient.ts  # Axios instance, baseURL, interceptors (token, 401)
-│   │   ├── ui/               # Button, Badge, BookCard, ErrorBoundary, ShelfEchoLogo, BookDescription
-│   │   ├── lib/               # formatBookDescription, bookKeys
-│   │   └── config/            # genreHierarchy, інші константи
-│   │
-│   └── widgets/
-│       └── layout/ui/Layout.tsx  # Шапка, навігація, контент
-│
-└── server/                   # Backend
+├── package.json
+├── vite.config.ts          # alias @ → src; dev proxy /api and /uploads → backend
+├── .env.example
+├── src/                    # React SPA
+│   ├── app/                # App shell, routes
+│   ├── pages/              # Route-level screens (auth, home, discover, admin, …)
+│   ├── features/           # Feature modules (e.g. auth)
+│   ├── entities/           # Types and entity-level API helpers
+│   ├── shared/             # apiClient, UI kit, config, utilities
+│   └── widgets/            # Layout shell
+└── server/
     ├── package.json
-    ├── tsconfig.json
-    ├── shelfecho.db          # SQLite (не комітити в публічний репо)
-    ├── DEPLOY.md             # Інструкція з розгортання бекенду (Railway, Render)
+    ├── .env.example
     ├── src/
-    │   ├── index.ts          # Express app, CORS, mount роутів, initDB
-    │   ├── db.ts             # Підключення SQLite, initDB (таблиці, міграції)
-    │   ├── middleware.ts     # JWT authMiddleware, перевірка ролей
-    │   ├── lib/subjects.ts   # Робота з subjects/subjects_cache
-    │   ├── routes/
-    │   │   ├── auth.ts       # POST /register, /login; GET /me
-    │   │   ├── books.ts      # Пошук, деталі, тренди, за жанром, автор
-    │   │   ├── favorites.ts
-    │   │   ├── readingList.ts
-    │   │   ├── comments.ts   # CRUD, спойлери, скарги
-    │   │   ├── user.ts       # Профіль, онбординг, статистика, досягнення
-    │   │   ├── upload.ts     # Завантаження аватарки
-    │   │   ├── recommendations.ts
-    │   │   └── admin.ts     # Статистика, модерація, користувачі, налаштування
-    │   └── uploads/          # Завантажені аватарки (файли)
-    └── dist/                 # Збірка TS (node dist/index.js)
+    │   ├── index.ts        # Express app, CORS, route mounting
+    │   ├── db.ts           # SQLite schema and migrations
+    │   ├── middleware.ts   # JWT auth, role checks
+    │   ├── lib/            # mail, rec weights, google OAuth helpers, …
+    │   └── routes/         # auth, books, favorites, …
+    └── uploads/            # Local avatar files (dev / single-instance)
 ```
 
-### Основні таблиці БД (server)
+---
 
-- **users** — id, name, email, password, avatar, onboarded, favorite_genres, reading_goal, role, blocked, completed_from_want_list, created_at
-- **favorites** — user_id, book_key, title, author, cover_id
-- **reading_list** — user_id, book_key, title, author, cover_id, status (reading/want/read), progress, total_pages, pages_read, rating, subjects
-- **comments** — user_id, book_key, text, rating, has_spoiler, status (pending/approved)
-- **comment_reports** — user_id, comment_id, reason
-- **not_interested** — user_id, book_key
-- **subjects_cache** — book_key, subjects (JSON)
-- **user_achievements** — user_id, achievement_id
-- **search_logs** — user_id, query, results_count
-- **settings** — key-value (наприклад rec_weights)
+## Database
+
+Key tables: `users` (roles, `blocked`, `is_active`, verification and reset tokens, optional `google_id`), `favorites`, `reading_list`, `comments`, `comment_reports`, `not_interested`, `subjects_cache`, `user_achievements`, `search_logs`, `settings`.
+
+**SQLite on AWS:** a single EC2/ECS task with a persistent volume (EBS) is straightforward. For multiple API replicas you need a **shared filesystem (EFS)** or migrate to **Amazon RDS** (e.g. PostgreSQL).
 
 ---
 
-## Розробка
+## Local development
 
-### Вимоги
+Requirements: **Node.js 18+** and npm.
 
-- Node.js 18+
-- npm або аналог
+```bash
+npm install
+cd server && npm install && cd ..
+npm run dev
+```
 
-### Встановлення та запуск
+- Frontend: [http://localhost:5173](http://localhost:5173)  
+- API: [http://localhost:3001](http://localhost:3001) — Vite proxies `/api` and `/uploads` in development, so `VITE_API_URL` is optional locally.
 
-1. Клонувати репозиторій.
-2. У **корені проєкту** (фронт):
-   ```bash
-   npm install
-   ```
-3. У **server/** (бекенд):
-   ```bash
-   cd server && npm install
-   cd ..
-   ```
-4. Запуск фронту та бекенду одночасно з кореня:
-   ```bash
-   npm run dev
-   ```
-   - Фронт: [http://localhost:5173](http://localhost:5173) (Vite).
-   - Бекенд: [http://localhost:3001](http://localhost:3001). Vite проксує `/api` та `/uploads` на `localhost:3001`, тому в dev не потрібно вказувати `VITE_API_URL`.
-
-Окремі команди:
-
-- Тільки фронт: `npm run dev:client`
-- Тільки бекенд: `npm run dev:server`
-- Збірка фронту: `npm run build`
-- Лінт: `npm run lint`
-
-### Змінні середовища
-
-**Frontend (Vite)**
-
-- `VITE_API_URL` — базовий URL API для продакшену (наприклад `https://api.shelfecho.site` або `https://xxx.railway.app/api`). Якщо не задано, використовується відносний шлях `/api`. Можна вказувати з або без суфікса `/api` — клієнт при потребі допише `/api`.
-
-**Backend (server/)**
-
-- `PORT` — порт сервера (за замовчуванням 3001).
-- `HOST` — хост (за замовчуванням 0.0.0.0 для хмарного деплою).
-- `FRONTEND_URL` — додатковий дозволений origin для CORS (наприклад `https://shelfecho.site`).
-
-Файл `server/.env` можна використовувати для локальної розробки (dotenv підхоплює його автоматично).
+Other scripts: `npm run dev:client`, `npm run dev:server`, `npm run build`, `npm run lint`.
 
 ---
 
-## Деплой
+## Environment variables
 
-- **Сайт задеплоєний через AWS.**  
-- **Домен:** [shelfecho.site](https://shelfecho.site)
-
-Фронт і бекенд розгортаються окремо:
-
-- **Фронт** — статична збірка (Vite): збирається в `dist/`, файли роздаються через хостинг (у вашому випадку інфраструктура AWS). Домен shelfecho.site вказує на цей фронт.
-- **Бекенд** — Node.js (Express) та SQLite. Його потрібно розмістити на окремому сервісі (наприклад Compute Engine, Cloud Run, або Railway/Render). Детальні кроки для розгортання бекенду (Railway, Render, змінні, підключення фронту) описані в ** [server/DEPLOY.md](server/DEPLOY.md)**.
-
-Після розгортання бекенду на продакшені в конфігурації фронту (збірка для AWS) потрібно вказати змінну `VITE_API_URL` на URL вашого API (наприклад `https://api.shelfecho.site` або окремий домен/сервіс), щоб логін, реєстрація та всі запити йшли на живий бекенд.
+See **`.env.example`** (frontend) and **`server/.env.example`** (API, email, OAuth, JWT).
 
 ---
 
-## Ліцензія та авторство
+## Deployment on AWS
 
-Проєкт приватний. Всі права захищені.
+Typical layout:
+
+1. **Static site** — `npm run build` → upload `dist/` to **Amazon S3** and serve via **CloudFront** (HTTPS, caching, SPA error document → `index.html` if you use client-side routing on unknown paths).
+2. **API** — run `node server/dist/index.js` on **EC2**, **ECS/Fargate**, or behind **API Gateway + Lambda** (would require adapter changes; the reference app assumes a long-lived Node process).
+3. **Secrets** — prefer **AWS Secrets Manager** or **SSM Parameter Store** instead of committing `.env` files.
+4. **Email** — **Amazon SES** (verify domain or addresses; note sandbox limits until production access).
+
+The included GitHub Action (`.github/workflows/deploy.yml`) shows an **SSH pull + build + pm2** pattern on a single host; adjust or replace with OIDC → S3 sync + CloudFront invalidation if you move static hosting to S3.
+
+---
+
+## API overview
+
+| Prefix | Purpose |
+|--------|---------|
+| `POST /api/auth/register` | Create user; email verification required before login |
+| `POST /api/auth/login` | JWT + user |
+| `GET /api/auth/me` | Current user (Bearer token) |
+| `GET /api/auth/google` | Start Google OAuth |
+| `GET /api/auth/google/callback` | Google OAuth callback (redirect) |
+| `GET /api/auth/verify-email?token=` | Activate account; returns JWT + user |
+| `POST /api/auth/forgot-password` | Send reset email |
+| `POST /api/auth/reset-password` | Set new password from token |
+| `GET /api/books/...` | Search, details, subjects, popular-now, … |
+| `GET /api/quotes/daily` | Quote of the day (cached) |
+| `GET /api/recommendations/...` | Featured (paginated), content-based, collaborative |
+| `GET/POST …` | `favorites`, `reading-list`, `comments`, `user`, `upload`, `admin` |
+
+All non-auth routes that require a user expect `Authorization: Bearer <jwt>`.
+
+---
+
+## License
+
+Private project. All rights reserved.

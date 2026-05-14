@@ -21,14 +21,30 @@ apiClient.interceptors.request.use((config) => {
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    const isAuthPage = typeof window !== 'undefined' && window.location.pathname === '/auth';
-    if (error.response?.status === 401 && !isAuthPage) {
+    const path = typeof window !== 'undefined' ? window.location.pathname : '';
+    const skipAuthRedirect =
+      path === '/auth' ||
+      path === '/auth/callback' ||
+      path === '/verify-email' ||
+      path === '/forgot-password' ||
+      path === '/reset-password';
+
+    if (error.response?.status === 401 && !skipAuthRedirect) {
       localStorage.removeItem('shelfecho_token');
       window.location.href = '/auth';
     }
-    if (error.response?.status === 403 && error.response?.data?.error === 'Account is blocked') {
+    const errMsg = error.response?.data?.error;
+    if (error.response?.status === 403 && errMsg === 'Account is blocked') {
       localStorage.removeItem('shelfecho_token');
-      if (!isAuthPage) window.location.href = '/auth';
+      if (!skipAuthRedirect) window.location.href = '/auth';
+    }
+    if (
+      error.response?.status === 403 &&
+      typeof errMsg === 'string' &&
+      errMsg.toLowerCase().includes('verify')
+    ) {
+      localStorage.removeItem('shelfecho_token');
+      if (!skipAuthRedirect) window.location.href = '/auth?needsVerification=1';
     }
     return Promise.reject(error);
   }

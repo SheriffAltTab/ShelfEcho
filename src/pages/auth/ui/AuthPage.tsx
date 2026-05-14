@@ -1,35 +1,51 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Mail, Lock, User, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/shared/ui/Button';
 import { ShelfEchoLogo } from '@/shared/ui/ShelfEchoLogo';
 import { useAuth } from '@/features/auth/model/authContext';
+import { getGoogleAuthStartUrl } from '@/features/auth/api/authApi';
 
 type AuthMode = 'login' | 'signup';
 
 export function AuthPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { login, register } = useAuth();
   const [mode, setMode] = useState<AuthMode>('login');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [registerBanner, setRegisterBanner] = useState('');
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     password: '',
   });
 
+  useEffect(() => {
+    const err = searchParams.get('error');
+    if (err) setError(decodeURIComponent(err));
+    if (searchParams.get('needsVerification') === '1') {
+      setError('Please verify your email before signing in.');
+    }
+  }, [searchParams]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setRegisterBanner('');
     setIsLoading(true);
 
     try {
       if (mode === 'signup') {
-        await register(formData.name, formData.email, formData.password);
-        navigate('/onboarding');
+        const r = await register(formData.name, formData.email, formData.password);
+        if (r.needsVerification) {
+          setRegisterBanner(r.message || 'Check your email to verify your account before signing in.');
+        } else {
+          navigate('/onboarding');
+        }
       } else {
         await login(formData.email, formData.password);
         navigate('/');
@@ -43,11 +59,11 @@ export function AuthPage() {
         (typeof backendError === 'string' && backendError.trim() ? backendError : null) ||
         (err instanceof Error ? err.message : '') ||
         (ax?.response?.status === 404 || (ax?.response?.status != null && ax.response.status >= 500)
-          ? 'Сервер недоступний. Спробуйте пізніше.'
+          ? 'Server unavailable. Please try again later.'
           : ax?.response?.data && typeof ax.response.data === 'string'
-            ? 'Сервер повернув некоректну відповідь. Перевірте, чи працює бекенд.'
-            : 'Щось пішло не так. Спробуйте ще раз.');
-      setError(typeof msg === 'string' && msg.trim() ? msg : 'Щось пішло не так. Спробуйте ще раз.');
+            ? 'Server returned an invalid response. Check that the API is running.'
+            : 'Something went wrong. Please try again.');
+      setError(typeof msg === 'string' && msg.trim() ? msg : 'Something went wrong. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -56,6 +72,7 @@ export function AuthPage() {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
     setError('');
+    setRegisterBanner('');
   };
 
   return (
@@ -76,7 +93,7 @@ export function AuthPage() {
         >
           <div className="flex border-b border-brown/10">
             <button
-              onClick={() => { setMode('login'); setError(''); }}
+              onClick={() => { setMode('login'); setError(''); setRegisterBanner(''); }}
               className={`flex-1 py-4 text-center font-medium transition-colors relative ${
                 mode === 'login' ? 'text-brown' : 'text-brown/50 hover:text-brown/70'
               }`}
@@ -87,7 +104,7 @@ export function AuthPage() {
               )}
             </button>
             <button
-              onClick={() => { setMode('signup'); setError(''); }}
+              onClick={() => { setMode('signup'); setError(''); setRegisterBanner(''); }}
               className={`flex-1 py-4 text-center font-medium transition-colors relative ${
                 mode === 'signup' ? 'text-brown' : 'text-brown/50 hover:text-brown/70'
               }`}
@@ -122,6 +139,12 @@ export function AuthPage() {
                 {error ? (
                   <div role="alert" className="mb-4 min-h-[2.5rem] p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-sm text-center flex items-center justify-center">
                     {error}
+                  </div>
+                ) : null}
+
+                {registerBanner ? (
+                  <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl text-sm text-center">
+                    {registerBanner}
                   </div>
                 ) : null}
 
@@ -191,6 +214,13 @@ export function AuthPage() {
                         {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                       </button>
                     </div>
+                    {mode === 'login' ? (
+                      <div className="text-right -mt-2">
+                        <Link to="/forgot-password" className="text-sm text-amber-800 hover:underline">
+                          Forgot password?
+                        </Link>
+                      </div>
+                    ) : null}
                   </div>
 
                   <Button
@@ -201,6 +231,24 @@ export function AuthPage() {
                     isLoading={isLoading}
                   >
                     {mode === 'login' ? 'Sign In' : 'Create Account'}
+                  </Button>
+
+                  <div className="flex items-center gap-3 pt-1">
+                    <div className="h-px flex-1 bg-brown/15" />
+                    <span className="text-xs text-brown/45 uppercase tracking-wide">or</span>
+                    <div className="h-px flex-1 bg-brown/15" />
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="lg"
+                    className="w-full border-brown/20 text-brown"
+                    onClick={() => {
+                      window.location.assign(getGoogleAuthStartUrl());
+                    }}
+                  >
+                    Continue with Google
                   </Button>
                 </form>
               </motion.div>
@@ -213,7 +261,7 @@ export function AuthPage() {
             <>
               Don't have an account?{' '}
               <button
-                onClick={() => { setMode('signup'); setError(''); }}
+                onClick={() => { setMode('signup'); setError(''); setRegisterBanner(''); }}
                 className="text-amber-700 hover:text-amber-800 font-medium"
               >
                 Sign up
@@ -223,7 +271,7 @@ export function AuthPage() {
             <>
               Already have an account?{' '}
               <button
-                onClick={() => { setMode('login'); setError(''); }}
+                onClick={() => { setMode('login'); setError(''); setRegisterBanner(''); }}
                 className="text-amber-700 hover:text-amber-800 font-medium"
               >
                 Sign in

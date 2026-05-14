@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { bookPath } from '@/shared/lib/bookKeys';
@@ -8,7 +8,7 @@ import {
 } from 'recharts';
 import {
   BarChart3, Settings, Shield, Activity, Users, Search,
-  AlertTriangle, Trash2, Check, Eye, Ban, RefreshCw,
+  AlertTriangle, Trash2, Eye, Ban, RefreshCw,
 } from 'lucide-react';
 import { useAuth } from '@/features/auth/model/authContext';
 import apiClient from '@/shared/api/apiClient';
@@ -18,7 +18,7 @@ import apiClient from '@/shared/api/apiClient';
 /* ------------------------------------------------------------------ */
 
 type Tab = 'dashboard' | 'recommendations' | 'moderation' | 'health';
-type ModerationSubTab = 'queue' | 'reports' | 'users';
+type ModerationSubTab = 'reports' | 'users';
 
 interface RegistrationPoint { day: string; count: number }
 interface TopWantBook { rank: number; title: string; count: number }
@@ -37,14 +37,6 @@ interface SimulationResult {
   readingList?: { title: string; author: string; status: string }[];
   similarUsers?: { userId: number; commonBooks: number }[];
   explanation?: string | Record<string, string>;
-}
-
-interface QueueComment {
-  id: number;
-  user_name: string;
-  book_key: string;
-  text: string;
-  rating: number;
 }
 
 interface Report {
@@ -488,10 +480,9 @@ function RecommendationSection() {
 
 function ModerationSection() {
   const { user: currentUser } = useAuth();
-  const [subTab, setSubTab] = useState<ModerationSubTab>('queue');
+  const [subTab, setSubTab] = useState<ModerationSubTab>('reports');
 
   const subTabs: { key: ModerationSubTab; icon: typeof Shield; label: string }[] = [
-    { key: 'queue', icon: Shield, label: 'Queue' },
     { key: 'reports', icon: AlertTriangle, label: 'Reports' },
     { key: 'users', icon: Users, label: 'Users' },
   ];
@@ -519,98 +510,10 @@ function ModerationSection() {
       </div>
 
       <AnimatePresence mode="wait">
-        {subTab === 'queue' && <QueuePanel key="queue" />}
         {subTab === 'reports' && <ReportsPanel key="reports" />}
         {subTab === 'users' && <UsersPanel key="users" isSuperadmin={currentUser?.role === 'superadmin'} />}
       </AnimatePresence>
     </div>
-  );
-}
-
-/* ---------- Queue Panel ---------- */
-
-function QueuePanel() {
-  const [comments, setComments] = useState<QueueComment[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState<Record<number, string>>({});
-
-  const load = useCallback(() => {
-    setLoading(true);
-    apiClient.get<{ comments: QueueComment[] }>('/admin/moderation/queue')
-      .then((res) => setComments(res.data?.comments ?? []))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
-
-  const handleAction = async (id: number, action: 'approve' | 'reject' | 'force_spoiler') => {
-    setActionLoading((prev) => ({ ...prev, [id]: action }));
-    try {
-      await apiClient.put(`/admin/moderation/${id}`, { action });
-      setComments((prev) => prev.filter((c) => c.id !== id));
-    } catch { /* keep in list */ }
-    finally {
-      setActionLoading((prev) => { const n = { ...prev }; delete n[id]; return n; });
-    }
-  };
-
-  if (loading) return <Spinner />;
-
-  if (comments.length === 0) {
-    return (
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-        <Card className="text-center py-12">
-          <Check className="w-10 h-10 text-emerald-400 mx-auto mb-3" />
-          <p className="text-gray-500 text-sm">Moderation queue is empty</p>
-        </Card>
-      </motion.div>
-    );
-  }
-
-  return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-3">
-      {comments.map((c) => (
-        <Card key={c.id} className="flex flex-col sm:flex-row sm:items-start gap-4">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-sm font-medium text-gray-800">{c.user_name}</span>
-              <span className="text-xs text-gray-400">on {c.book_key}</span>
-              {c.rating != null && (
-                <span className="text-xs text-amber-600 font-medium">★ {c.rating}</span>
-              )}
-            </div>
-            <p className="text-sm text-gray-600 line-clamp-3">{c.text}</p>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={() => handleAction(c.id, 'approve')}
-              disabled={!!actionLoading[c.id]}
-              className="p-2 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition disabled:opacity-50"
-              title="Approve"
-            >
-              <Check className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => handleAction(c.id, 'reject')}
-              disabled={!!actionLoading[c.id]}
-              className="p-2 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition disabled:opacity-50"
-              title="Reject"
-            >
-              <Ban className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => handleAction(c.id, 'force_spoiler')}
-              disabled={!!actionLoading[c.id]}
-              className="p-2 rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 transition disabled:opacity-50"
-              title="Force Spoiler"
-            >
-              <Eye className="w-4 h-4" />
-            </button>
-          </div>
-        </Card>
-      ))}
-    </motion.div>
   );
 }
 
@@ -654,8 +557,8 @@ function ReportsPanel() {
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
             <div className="flex-1 min-w-0">
               <div className="flex flex-wrap items-baseline gap-2 mb-1">
-                <span className="text-sm font-semibold text-gray-800">Автор коментаря: {r.comment_user_name ?? '—'}</span>
-                <span className="text-xs text-gray-400">Скарга від: {r.reporter_name}</span>
+                <span className="text-sm font-semibold text-gray-800">Comment author: {r.comment_user_name ?? '—'}</span>
+                <span className="text-xs text-gray-400">Reported by: {r.reporter_name}</span>
               </div>
               <p className="text-sm text-gray-600 mb-2 line-clamp-2">{r.comment_text}</p>
               <div className="flex flex-wrap items-center gap-2">
@@ -669,14 +572,14 @@ function ReportsPanel() {
                 className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium bg-amber-50 text-amber-800 hover:bg-amber-100 transition"
               >
                 <Eye className="w-4 h-4" />
-                До коментаря
+                View comment
               </Link>
               <button
                 onClick={() => handleDeleteComment(r.comment_id)}
                 className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium bg-red-50 text-red-600 hover:bg-red-100 transition"
               >
                 <Trash2 className="w-4 h-4" />
-                Видалити коментар
+                Delete comment
               </button>
             </div>
           </div>
@@ -690,24 +593,37 @@ function ReportsPanel() {
 
 function UsersPanel({ isSuperadmin }: { isSuperadmin: boolean }) {
   const [query, setQuery] = useState('');
-  const [users, setUsers] = useState<SearchedUser[]>([]);
-  const [searching, setSearching] = useState(false);
+  const [allUsers, setAllUsers] = useState<SearchedUser[]>([]);
+  const [listLoading, setListLoading] = useState(true);
   const [activityUser, setActivityUser] = useState<SearchedUser | null>(null);
   const [activity, setActivity] = useState<UserActivity | null>(null);
   const [activityLoading, setActivityLoading] = useState(false);
 
-  const handleSearch = async () => {
-    if (!query.trim()) return;
-    setSearching(true);
-    try {
-      const res = await apiClient.get<{ users: SearchedUser[] }>(`/admin/users/search?q=${encodeURIComponent(query.trim())}`);
-      setUsers(res.data?.users ?? []);
-    } catch {
-      setUsers([]);
-    } finally {
-      setSearching(false);
-    }
-  };
+  useEffect(() => {
+    let cancelled = false;
+    setListLoading(true);
+    apiClient.get<{ users: SearchedUser[] }>('/admin/users')
+      .then((res) => {
+        if (!cancelled) {
+          const raw = res.data?.users ?? [];
+          setAllUsers(raw.map((u) => ({ ...u, blocked: !!u.blocked })));
+        }
+      })
+      .catch(() => { if (!cancelled) setAllUsers([]); })
+      .finally(() => { if (!cancelled) setListLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const filteredUsers = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return allUsers;
+    return allUsers.filter((u) => {
+      if (String(u.id) === q) return true;
+      if (u.name.toLowerCase().includes(q)) return true;
+      if (u.email.toLowerCase().includes(q)) return true;
+      return false;
+    });
+  }, [allUsers, query]);
 
   const handleViewActivity = async (u: SearchedUser) => {
     setActivityUser(u);
@@ -729,7 +645,7 @@ function UsersPanel({ isSuperadmin }: { isSuperadmin: boolean }) {
   const handleBlockToggle = async (u: SearchedUser) => {
     try {
       await apiClient.put(`/admin/users/${u.id}/block`, { blocked: !u.blocked });
-      setUsers((prev) =>
+      setAllUsers((prev) =>
         prev.map((usr) => (usr.id === u.id ? { ...usr, blocked: !usr.blocked } : usr)),
       );
     } catch { /* ignore */ }
@@ -738,44 +654,42 @@ function UsersPanel({ isSuperadmin }: { isSuperadmin: boolean }) {
   const handleRoleChange = async (u: SearchedUser, newRole: string) => {
     try {
       await apiClient.put(`/admin/users/${u.id}/role`, { role: newRole });
-      setUsers((prev) =>
+      setAllUsers((prev) =>
         prev.map((usr) => (usr.id === u.id ? { ...usr, role: newRole } : usr)),
       );
     } catch { /* ignore */ }
   };
 
+  if (listLoading) return <Spinner />;
+
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-4">
-      {/* Search bar */}
+      {/* Client-side filter */}
       <div className="flex gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             type="text"
-            placeholder="Search users by name or email…"
+            placeholder="Filter by name, email, or user ID…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
             className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
           />
         </div>
-        <button
-          onClick={handleSearch}
-          disabled={searching || !query.trim()}
-          className="px-4 py-2 bg-amber-700 text-white text-sm font-medium rounded-xl hover:bg-amber-800 transition disabled:opacity-50"
-        >
-          {searching ? 'Searching…' : 'Search'}
-        </button>
       </div>
 
+      <p className="text-xs text-gray-500">
+        Showing {filteredUsers.length} of {allUsers.length} users
+      </p>
+
       {/* Results */}
-      {users.map((u) => (
+      {filteredUsers.map((u) => (
         <Card key={u.id} className="flex flex-col sm:flex-row sm:items-center gap-4">
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-0.5">
+            <div className="flex items-center gap-2 mb-0.5 flex-wrap">
               <span className="text-sm font-medium text-gray-800">{u.name}</span>
               <Badge>{u.role}</Badge>
-              {u.blocked && <Badge variant="danger">Blocked</Badge>}
+              {u.blocked ? <Badge variant="danger">Blocked</Badge> : <Badge variant="success">Not Banned</Badge>}
             </div>
             <p className="text-xs text-gray-500">{u.email} · ID {u.id}</p>
           </div>
