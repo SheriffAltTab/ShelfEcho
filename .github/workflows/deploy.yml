@@ -22,6 +22,8 @@ jobs:
             cd ~/ShelfEcho
             git pull origin master
             
+            echo "VITE_API_URL=https://shelfecho.site/api" > .env
+            
             # 1. Збірка Фронтенду
             npm install
             npm run build
