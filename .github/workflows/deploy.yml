@@ -24,7 +24,8 @@ jobs:
             
             cd ~/ShelfEcho || git clone https://github.com/SheriffAltTab/ShelfEcho.git ~/ShelfEcho
             cd ~/ShelfEcho
-            git pull origin master
+            git fetch --all
+            git reset --hard origin/master
             
             echo "VITE_API_URL=https://shelfecho.site/api" > .env
             
