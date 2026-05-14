@@ -2,7 +2,7 @@ name: Deploy ShelfEcho
 
 on:
   push:
-    branches: [ main ]
+    branches: [ master ]
 
 jobs:
   deploy:
@@ -17,9 +17,8 @@ jobs:
           script: |
             cd ~/ShelfEcho || git clone https://github.com/SheriffAltTab/ShelfEcho.git ~/ShelfEcho
             cd ~/ShelfEcho
-            git pull origin main
+            git pull origin master # Змінено з main на master
             npm install
             npm run build
-            # Перезапуск процесу в PM2
             pm2 delete shelfecho || true
             pm2 start dist/index.js --name "shelfecho"
