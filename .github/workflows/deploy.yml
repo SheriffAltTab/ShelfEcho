@@ -22,9 +22,13 @@ jobs:
             cd ~/ShelfEcho
             git pull origin master
             
+            # 1. Збірка Фронтенду
+            npm install
+            npm run build
+            
+            # 2. Збірка Бекенду
             cd server
             npm install
             npm run build
             
-            pm2 delete shelfecho || true
-            pm2 start dist/index.js --name "shelfecho"
+            pm2 restart shelfecho || pm2 start dist/index.js --name "shelfecho"
