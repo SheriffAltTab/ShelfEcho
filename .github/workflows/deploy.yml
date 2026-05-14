@@ -15,9 +15,14 @@ jobs:
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_KEY }}
           script: |
+            # Підвантажуємо NVM для сесії GitHub Actions
+            export NVM_DIR="$HOME/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+            
+            # Твій основний код розгортання
             cd ~/ShelfEcho || git clone https://github.com/SheriffAltTab/ShelfEcho.git ~/ShelfEcho
             cd ~/ShelfEcho
-            git pull origin master # Змінено з main на master
+            git pull origin master
             npm install
             npm run build
             pm2 delete shelfecho || true
