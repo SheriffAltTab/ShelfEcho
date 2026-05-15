@@ -12,11 +12,12 @@ export interface GoogleProfileInput {
  * Create or link a user from Google profile (Passport or manual OAuth).
  * Returns DB row or null if blocked / failure.
  */
-export function upsertGoogleUser(profile: GoogleProfileInput): Record<string, unknown> | null {
+export function upsertGoogleUser(profile: GoogleProfileInput): { row: Record<string, unknown>; created: boolean } | null {
   const existingByGoogle = db.prepare('SELECT * FROM users WHERE google_id = ?').get(profile.sub) as
     | Record<string, unknown>
     | undefined;
   let row = existingByGoogle;
+  let created = false;
 
   if (!row) {
     const byEmail = db.prepare('SELECT * FROM users WHERE email = ?').get(profile.email) as
@@ -37,6 +38,7 @@ export function upsertGoogleUser(profile: GoogleProfileInput): Record<string, un
         )
         .run(profile.name || profile.email.split('@')[0], profile.email, hashedPassword, profile.sub);
       row = db.prepare('SELECT * FROM users WHERE id = ?').get(ins.lastInsertRowid) as Record<string, unknown>;
+      created = true;
     }
   }
 
@@ -44,5 +46,5 @@ export function upsertGoogleUser(profile: GoogleProfileInput): Record<string, un
   if (Number(row.blocked) === 1) return null;
 
   db.prepare('UPDATE users SET is_active = 1 WHERE id = ?').run(row.id);
-  return db.prepare('SELECT * FROM users WHERE id = ?').get(row.id) as Record<string, unknown>;
+  return { row: db.prepare('SELECT * FROM users WHERE id = ?').get(row.id) as Record<string, unknown>, created };
 }

@@ -640,7 +640,11 @@ export function ProfilePage() {
                   <input type="password" placeholder="Current password" value={settingsCurrentPw} onChange={(e) => setSettingsCurrentPw(e.target.value)} className="w-full bg-linen border border-brown/10 rounded-xl py-3 px-4 text-brown placeholder:text-brown/40 focus:outline-none focus:ring-2 focus:ring-amber/50" />
                   <input type="password" placeholder="New password (min 6 characters)" value={settingsNewPw} onChange={(e) => setSettingsNewPw(e.target.value)} className="w-full bg-linen border border-brown/10 rounded-xl py-3 px-4 text-brown placeholder:text-brown/40 focus:outline-none focus:ring-2 focus:ring-amber/50" />
                 </div>
-                <p className="text-xs text-brown/40 mt-1">Leave blank if you don't want to change password</p>
+                <p className="text-xs text-brown/40 mt-1">
+                  {user?.isGoogleUser
+                    ? 'If you signed in with Google, leave current password blank to set a new password.'
+                    : 'Leave blank if you don\'t want to change password'}
+                </p>
               </div>
 
               <div className="border-t border-rose/20 pt-5">

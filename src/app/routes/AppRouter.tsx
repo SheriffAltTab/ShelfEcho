@@ -8,6 +8,7 @@ import { AuthCallbackPage } from '@/pages/auth/ui/AuthCallbackPage';
 import { VerifyEmailPage } from '@/pages/auth/ui/VerifyEmailPage';
 import { ForgotPasswordPage } from '@/pages/auth/ui/ForgotPasswordPage';
 import { ResetPasswordPage } from '@/pages/auth/ui/ResetPasswordPage';
+import { SetGooglePasswordPage } from '@/pages/auth/ui/SetGooglePasswordPage';
 import { OnboardingPage } from '@/pages/onboarding/ui/OnboardingPage';
 import { HomePage } from '@/pages/home/ui/HomePage';
 import { BookDetailsPage } from '@/pages/book-details/ui/BookDetailsPage';
@@ -123,6 +124,16 @@ export function AppRouter() {
             <ErrorBoundary>
               <ResetPasswordPage />
             </ErrorBoundary>
+          }
+        />
+        <Route
+          path="/auth/set-password"
+          element={
+            <ProtectedRoute>
+              <ErrorBoundary>
+                <SetGooglePasswordPage />
+              </ErrorBoundary>
+            </ProtectedRoute>
           }
         />
         <Route

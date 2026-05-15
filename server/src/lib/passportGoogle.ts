@@ -5,6 +5,7 @@ import { upsertGoogleUser } from './googleUserUpsert.js';
 
 export interface GoogleAuthUser {
   userId: number;
+  created?: boolean;
 }
 
 export function googleRedirectUri(): string {
@@ -37,16 +38,16 @@ export function registerGooglePassportStrategy(): void {
             done(new Error('Google profile missing email'));
             return;
           }
-          const row = upsertGoogleUser({
+          const result = upsertGoogleUser({
             sub,
             email,
             name: profile.displayName || email.split('@')[0] || 'Reader',
           });
-          if (!row) {
+          if (!result) {
             done(new Error('Could not sign in with Google'));
             return;
           }
-          done(null, { userId: row.id as number } satisfies GoogleAuthUser);
+          done(null, { userId: result.row.id as number, created: result.created } satisfies GoogleAuthUser);
         } catch (e) {
           done(e as Error);
         }

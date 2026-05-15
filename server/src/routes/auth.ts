@@ -26,6 +26,7 @@ function mapPublicUser(user: Record<string, unknown>) {
     favoriteGenres: JSON.parse((user.favorite_genres as string) || '[]') as string[],
     readingGoal: user.reading_goal as number,
     role: (user.role as string) || 'user',
+    isGoogleUser: !!user.google_id,
     ...(user.created_at ? { createdAt: String(user.created_at) } : {}),
   };
 }
@@ -48,13 +49,14 @@ authRouter.get(
     })(req, res, next);
   },
   (req, res) => {
-    const user = req.user as { userId?: number } | undefined;
+    const user = req.user as { userId?: number; created?: boolean } | undefined;
     if (!user?.userId) {
       res.redirect(302, `${getFrontendUrl()}/auth?error=google_no_user`);
       return;
     }
     const token = generateToken(user.userId);
-    res.redirect(302, `${getFrontendUrl()}/auth/callback#token=${encodeURIComponent(token)}`);
+    const callbackUrl = `${getFrontendUrl()}/auth/callback${user.created ? '?mode=set-password' : ''}#token=${encodeURIComponent(token)}`;
+    res.redirect(302, callbackUrl);
   },
 );
 

@@ -10,6 +10,7 @@ export interface User {
   readingGoal: number;
   createdAt?: string;
   role?: UserRole;
+  isGoogleUser?: boolean;
 }
 
 export interface UserStats {

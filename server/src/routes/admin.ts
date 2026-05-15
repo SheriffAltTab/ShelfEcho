@@ -187,19 +187,19 @@ adminRouter.get('/users', roleMiddleware('superadmin', 'moderator'), (req: AuthR
     const numericQ = parseInt(q, 10);
     if (!Number.isNaN(numericQ) && String(numericQ) === q) {
       users = db.prepare(
-        'SELECT id, name, email, avatar, role, blocked, created_at FROM users WHERE id = ? ORDER BY id ASC LIMIT ? OFFSET ?',
+        'SELECT id, name, email, avatar, role, blocked, created_at, google_id FROM users WHERE id = ? ORDER BY id ASC LIMIT ? OFFSET ?',
       ).all(numericQ, pageSize, offset) as any[];
       total = (db.prepare('SELECT COUNT(*) as count FROM users WHERE id = ?').get(numericQ) as any).count;
     } else {
       const pattern = `%${q}%`;
       users = db.prepare(
-        'SELECT id, name, email, avatar, role, blocked, created_at FROM users WHERE name LIKE ? OR email LIKE ? ORDER BY id ASC LIMIT ? OFFSET ?',
+        'SELECT id, name, email, avatar, role, blocked, created_at, google_id FROM users WHERE name LIKE ? OR email LIKE ? ORDER BY id ASC LIMIT ? OFFSET ?',
       ).all(pattern, pattern, pageSize, offset) as any[];
       total = (db.prepare('SELECT COUNT(*) as count FROM users WHERE name LIKE ? OR email LIKE ?').get(pattern, pattern) as any).count;
     }
   } else {
     users = db.prepare(
-      'SELECT id, name, email, avatar, role, blocked, created_at FROM users ORDER BY id ASC LIMIT ? OFFSET ?',
+      'SELECT id, name, email, avatar, role, blocked, created_at, google_id FROM users ORDER BY id ASC LIMIT ? OFFSET ?',
     ).all(pageSize, offset) as any[];
     total = (db.prepare('SELECT COUNT(*) as count FROM users').get() as any).count;
   }
@@ -214,9 +214,9 @@ adminRouter.get('/users/search', roleMiddleware('superadmin', 'moderator'), (req
   let users;
   const numericQ = parseInt(q, 10);
   if (!isNaN(numericQ)) {
-    users = db.prepare('SELECT id, name, email, avatar, role, blocked, created_at FROM users WHERE id = ?').all(numericQ);
+    users = db.prepare('SELECT id, name, email, avatar, role, blocked, created_at, google_id FROM users WHERE id = ?').all(numericQ);
   } else {
-    users = db.prepare("SELECT id, name, email, avatar, role, blocked, created_at FROM users WHERE name LIKE ? OR email LIKE ? LIMIT 20")
+    users = db.prepare("SELECT id, name, email, avatar, role, blocked, created_at, google_id FROM users WHERE name LIKE ? OR email LIKE ? LIMIT 20")
       .all(`%${q}%`, `%${q}%`);
   }
   res.json({ users });

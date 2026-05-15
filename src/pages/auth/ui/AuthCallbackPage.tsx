@@ -8,9 +8,11 @@ export function AuthCallbackPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
     const hash = window.location.hash.replace(/^#/, '');
     const params = new URLSearchParams(hash);
     const token = params.get('token');
+    const mode = searchParams.get('mode');
     if (!token) {
       setError('Missing sign-in token. Please try again.');
       return;
@@ -19,12 +21,16 @@ export function AuthCallbackPage() {
     let cancelled = false;
     (async () => {
       localStorage.setItem('shelfecho_token', token);
-      window.history.replaceState(null, '', window.location.pathname);
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
       const user = await refreshUser();
       if (cancelled) return;
       if (!user) {
         localStorage.removeItem('shelfecho_token');
         setError('Could not complete sign-in. Please try again.');
+        return;
+      }
+      if (mode === 'set-password') {
+        navigate('/auth/set-password', { replace: true });
         return;
       }
       navigate(user.onboarded ? '/' : '/onboarding', { replace: true });

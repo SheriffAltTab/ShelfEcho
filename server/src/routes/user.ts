@@ -45,14 +45,17 @@ userRouter.put('/profile', authMiddleware, (req: AuthRequest, res: Response) => 
 
   // Password change
   if (newPassword) {
+    const user = db.prepare('SELECT password, google_id FROM users WHERE id = ?').get(req.userId!) as any;
     if (!currentPassword) {
-      res.status(400).json({ error: 'Current password is required to change password' });
-      return;
-    }
-    const user = db.prepare('SELECT password FROM users WHERE id = ?').get(req.userId!) as any;
-    if (!bcrypt.compareSync(currentPassword, user.password)) {
-      res.status(403).json({ error: 'Current password is incorrect' });
-      return;
+      if (!user.google_id) {
+        res.status(400).json({ error: 'Current password is required to change password' });
+        return;
+      }
+    } else {
+      if (!bcrypt.compareSync(currentPassword, user.password)) {
+        res.status(403).json({ error: 'Current password is incorrect' });
+        return;
+      }
     }
     if (newPassword.length < 6) {
       res.status(400).json({ error: 'New password must be at least 6 characters' });

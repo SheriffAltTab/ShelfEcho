@@ -57,6 +57,8 @@ interface SearchedUser {
   role: string;
   blocked: boolean;
   created_at?: string;
+  google_id?: string;
+  isGoogleUser?: boolean;
 }
 
 interface UserActivity {
@@ -619,7 +621,7 @@ function UsersPanel({ isSuperadmin, currentUserId }: { isSuperadmin: boolean; cu
         params: { page: nextPage, pageSize, q: nextQuery.trim() || undefined },
       });
       const raw = res.data?.users ?? [];
-      setUsers(raw.map((u) => ({ ...u, blocked: !!u.blocked })));
+      setUsers(raw.map((u) => ({ ...u, blocked: !!u.blocked, isGoogleUser: !!u.google_id })));
       setTotal(res.data?.total ?? raw.length);
       setPage(res.data?.page ?? nextPage);
       setTotalPages(Math.max(1, res.data?.totalPages ?? 1));
@@ -722,8 +724,13 @@ function UsersPanel({ isSuperadmin, currentUserId }: { isSuperadmin: boolean; cu
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-0.5 flex-wrap">
               <span className="text-sm font-medium text-gray-800">{u.name}</span>
+              {u.isGoogleUser ? (
+                <span className="inline-flex items-center rounded-full bg-blue-100 text-blue-700 text-[11px] font-semibold uppercase tracking-[0.12em] px-2 py-1">
+                  Google
+                </span>
+              ) : null}
               <Badge>{u.role}</Badge>
-              {u.blocked ? <Badge variant="danger">Blocked</Badge> : <Badge variant="success">Not Banned</Badge>}
+              {u.blocked ? <Badge variant="danger">Blocked</Badge> : <Badge variant="success">Not Blocked</Badge>}
             </div>
             <p className="text-xs text-gray-500">{u.email} · ID {u.id}</p>
           </div>
