@@ -1042,10 +1042,6 @@ export function AdminPage() {
             );
           })}
         </nav>
-
-        <div className="p-4 border-t border-gray-100">
-          <p className="text-[10px] text-gray-300 text-center">ShelfEcho Admin v1.0</p>
-        </div>
       </aside>
 
       {/* Main Content */}
