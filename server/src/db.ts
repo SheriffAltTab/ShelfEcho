@@ -1,16 +1,43 @@
+/**
+ * Модуль для роботи з базою даних SQLite
+ * Містить ініціалізацію БД, створення таблиць та міграції
+ */
+
 import Database from 'better-sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+// Шлях до файлу бази даних
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dbPath = path.join(__dirname, '..', 'shelfecho.db');
 
+// Створюємо з'єднання з БД
 const db = new Database(dbPath);
 
+// Включаємо WAL режим для кращої продуктивності та надійності
 db.pragma('journal_mode = WAL');
+// Включаємо перевірку foreign keys
 db.pragma('foreign_keys = ON');
 
+/**
+ * Допоміжна функція для додавання колонки до таблиці, якщо вона не існує
+ * @param tableName - Назва таблиці
+ * @param columnName - Назва колонки
+ * @param columnDefinition - SQL визначення колонки
+ */
+function addColumnIfNotExists(tableName: string, columnName: string, columnDefinition: string) {
+  const cols = db.prepare(`PRAGMA table_info(${tableName})`).all() as any[];
+  const colNames = cols.map((c: any) => c.name);
+  if (!colNames.includes(columnName)) {
+    db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnDefinition}`);
+  }
+}
+
+/**
+ * Ініціалізує базу даних: створює таблиці, виконує міграції та індекси
+ */
 export function initDB() {
+  // Створюємо основні таблиці
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -83,71 +110,35 @@ export function initDB() {
     );
   `);
 
-  // Migrations for existing DBs
-  const cols = db.prepare("PRAGMA table_info(reading_list)").all() as any[];
-  const colNames = cols.map((c: any) => c.name);
-  if (!colNames.includes('total_pages')) {
-    db.exec('ALTER TABLE reading_list ADD COLUMN total_pages INTEGER DEFAULT 0');
-  }
-  if (!colNames.includes('pages_read')) {
-    db.exec('ALTER TABLE reading_list ADD COLUMN pages_read INTEGER DEFAULT 0');
-  }
+  // Міграції для таблиці reading_list
+  addColumnIfNotExists('reading_list', 'total_pages', 'total_pages INTEGER DEFAULT 0');
+  addColumnIfNotExists('reading_list', 'pages_read', 'pages_read INTEGER DEFAULT 0');
+  addColumnIfNotExists('reading_list', 'subjects', "subjects TEXT DEFAULT '[]'");
 
-  const userCols = db.prepare("PRAGMA table_info(users)").all() as any[];
-  const userColNames = userCols.map((c: any) => c.name);
-  if (!userColNames.includes('completed_from_want_list')) {
-    db.exec('ALTER TABLE users ADD COLUMN completed_from_want_list INTEGER DEFAULT 0');
-  }
-  if (!userColNames.includes('role')) {
-    db.exec("ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user'");
-  }
-  if (!userColNames.includes('blocked')) {
-    db.exec('ALTER TABLE users ADD COLUMN blocked INTEGER DEFAULT 0');
-  }
-  if (!userColNames.includes('is_active')) {
-    db.exec('ALTER TABLE users ADD COLUMN is_active INTEGER DEFAULT 1');
-  }
-  if (!userColNames.includes('email_verification_token')) {
-    db.exec('ALTER TABLE users ADD COLUMN email_verification_token TEXT');
-  }
-  if (!userColNames.includes('email_verification_expires')) {
-    db.exec('ALTER TABLE users ADD COLUMN email_verification_expires TEXT');
-  }
-  if (!userColNames.includes('password_reset_token')) {
-    db.exec('ALTER TABLE users ADD COLUMN password_reset_token TEXT');
-  }
-  if (!userColNames.includes('password_reset_expires')) {
-    db.exec('ALTER TABLE users ADD COLUMN password_reset_expires TEXT');
-  }
-  if (!userColNames.includes('google_id')) {
-    db.exec('ALTER TABLE users ADD COLUMN google_id TEXT');
-  }
-  const commentCols = db.prepare("PRAGMA table_info(comments)").all() as any[];
-  const commentColNames = commentCols.map((c: any) => c.name);
-  if (!commentColNames.includes('has_spoiler')) {
-    db.exec('ALTER TABLE comments ADD COLUMN has_spoiler INTEGER DEFAULT 0');
-  }
-  if (!commentColNames.includes('status')) {
-    db.exec("ALTER TABLE comments ADD COLUMN status TEXT DEFAULT 'approved'");
-  }
+  // Міграції для таблиці users
+  addColumnIfNotExists('users', 'completed_from_want_list', 'completed_from_want_list INTEGER DEFAULT 0');
+  addColumnIfNotExists('users', 'role', "role TEXT DEFAULT 'user'");
+  addColumnIfNotExists('users', 'blocked', 'blocked INTEGER DEFAULT 0');
+  addColumnIfNotExists('users', 'is_active', 'is_active INTEGER DEFAULT 1');
+  addColumnIfNotExists('users', 'email_verification_token', 'email_verification_token TEXT');
+  addColumnIfNotExists('users', 'email_verification_expires', 'email_verification_expires TEXT');
+  addColumnIfNotExists('users', 'password_reset_token', 'password_reset_token TEXT');
+  addColumnIfNotExists('users', 'password_reset_expires', 'password_reset_expires TEXT');
+  addColumnIfNotExists('users', 'google_id', 'google_id TEXT');
 
-  // Reading list: subjects column
-  const rlCols = db.prepare("PRAGMA table_info(reading_list)").all() as any[];
-  const rlColNames = rlCols.map((c: any) => c.name);
-  if (!rlColNames.includes('subjects')) {
-    db.exec("ALTER TABLE reading_list ADD COLUMN subjects TEXT DEFAULT '[]'");
-  }
+  // Міграції для таблиці comments
+  addColumnIfNotExists('comments', 'has_spoiler', 'has_spoiler INTEGER DEFAULT 0');
+  addColumnIfNotExists('comments', 'status', "status TEXT DEFAULT 'approved'");
 
+  // Створюємо додаткові таблиці
   db.exec(`
     CREATE TABLE IF NOT EXISTS user_achievements (
       user_id INTEGER NOT NULL,
       achievement_id INTEGER NOT NULL,
       PRIMARY KEY (user_id, achievement_id),
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-    )
-  `);
+    );
 
-  db.exec(`
     CREATE TABLE IF NOT EXISTS comment_reports (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
@@ -157,27 +148,23 @@ export function initDB() {
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
       FOREIGN KEY (comment_id) REFERENCES comments(id) ON DELETE CASCADE,
       UNIQUE(user_id, comment_id)
-    )
-  `);
+    );
 
-  db.exec(`
     CREATE TABLE IF NOT EXISTS search_logs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER,
       query TEXT NOT NULL,
       results_count INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now'))
-    )
-  `);
+    );
 
-  db.exec(`
     CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
-    )
+    );
   `);
 
-  // Seed default recommendation weights if not present
+  // Ініціалізуємо стандартні налаштування рекомендацій, якщо вони відсутні
   const recWeights = db.prepare("SELECT key FROM settings WHERE key = 'rec_weights'").get();
   if (!recWeights) {
     db.prepare("INSERT INTO settings (key, value) VALUES (?, ?)").run(
@@ -186,7 +173,7 @@ export function initDB() {
     );
   }
 
-  // Make first user superadmin if no superadmin exists
+  // Робимо першого користувача супер-адміном, якщо немає інших супер-адмінів
   const hasSuperAdmin = db.prepare("SELECT id FROM users WHERE role = 'superadmin' LIMIT 1").get();
   if (!hasSuperAdmin) {
     const firstUser = db.prepare("SELECT id FROM users ORDER BY id ASC LIMIT 1").get() as any;
@@ -195,7 +182,7 @@ export function initDB() {
     }
   }
 
-  // Performance: indexes for hot queries (recommendations, popular-now, moderation)
+  // Створюємо індекси для оптимізації запитів
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_reading_list_user_id ON reading_list(user_id);
     CREATE INDEX IF NOT EXISTS idx_reading_list_book_key ON reading_list(book_key);

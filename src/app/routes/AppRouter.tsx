@@ -1,3 +1,8 @@
+/**
+ * Головний компонент маршрутизації додатку
+ * Визначає всі маршрути та захищені області
+ */
+
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { lazy, Suspense } from 'react';
 import { useAuth } from '@/features/auth/model/authContext';
@@ -18,9 +23,13 @@ import { SearchPage } from '@/pages/search/ui/SearchPage';
 import { AuthorPage } from '@/pages/author/ui/AuthorPage';
 import { UserProfilePage } from '@/pages/user-profile/ui/UserProfilePage';
 
+// Ледачі завантаження важких компонентів для оптимізації
 const AdminPage = lazy(() => import('@/pages/admin/ui/AdminPage').then((m) => ({ default: m.AdminPage })));
 const DiscoverPage = lazy(() => import('@/pages/discover/ui/DiscoverPage').then((m) => ({ default: m.DiscoverPage })));
 
+/**
+ * Компонент спінера завантаження для маршрутів
+ */
 function RouteSpinner() {
   return (
     <div className="min-h-screen bg-linen flex items-center justify-center">
@@ -29,15 +38,15 @@ function RouteSpinner() {
   );
 }
 
+/**
+ * Захищений маршрут - вимагає аутентифікації
+ * Перенаправляє неавторизованих користувачів на сторінку входу
+ */
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen bg-linen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-amber border-t-transparent" />
-      </div>
-    );
+    return <RouteSpinner />;
   }
 
   if (!isAuthenticated) {
@@ -47,15 +56,15 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/**
+ * Маршрут аутентифікації - тільки для неавторизованих користувачів
+ * Перенаправляє авторизованих користувачів на головну або онбординг
+ */
 function AuthRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading, user } = useAuth();
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen bg-linen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-amber border-t-transparent" />
-      </div>
-    );
+    return <RouteSpinner />;
   }
 
   if (isAuthenticated) {
@@ -68,15 +77,14 @@ function AuthRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/**
+ * Маршрут онбордингу - тільки для авторизованих користувачів, які не пройшли онбординг
+ */
 function OnboardingRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading, user } = useAuth();
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen bg-linen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-amber border-t-transparent" />
-      </div>
-    );
+    return <RouteSpinner />;
   }
 
   if (!isAuthenticated) {
@@ -90,10 +98,15 @@ function OnboardingRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/**
+ * Головний компонент маршрутизації
+ * Визначає всі маршрути додатку з відповідними захисними механізмами
+ */
 export function AppRouter() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Маршрути аутентифікації - доступні без авторизації */}
         <Route
           path="/auth/callback"
           element={
@@ -146,6 +159,8 @@ export function AppRouter() {
             </ErrorBoundary>
           }
         />
+
+        {/* Онбординг - тільки для нових користувачів */}
         <Route
           path="/onboarding"
           element={
@@ -154,6 +169,8 @@ export function AppRouter() {
             </OnboardingRoute>
           }
         />
+
+        {/* Захищені маршрути - вимагають авторизації */}
         <Route
           path="/"
           element={
@@ -248,6 +265,8 @@ export function AppRouter() {
             </ProtectedRoute>
           }
         />
+
+        {/* Редирект для неіснуючих маршрутів */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

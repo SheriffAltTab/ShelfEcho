@@ -1,3 +1,8 @@
+/**
+ * Маршрути аутентифікації
+ * Обробляє реєстрацію, вхід, верифікацію email, скидання пароля та Google OAuth
+ */
+
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
@@ -9,13 +14,22 @@ import passport from 'passport';
 import { isGoogleOAuthConfigured } from '../lib/passportGoogle.js';
 import { emailConfigError, env } from '../config/env.js';
 
+// Створюємо роутер для аутентифікації
 export const authRouter = Router();
 
-// Змінено на функцію: тепер змінна .env зчитується в правильний момент
+/**
+ * Отримує URL фронтенду з конфігурації
+ * @returns URL фронтенду для редиректів
+ */
 function getFrontendUrl() {
   return env.frontendUrl;
 }
 
+/**
+ * Перетворює користувача з БД у публічний формат для API
+ * @param user - Об'єкт користувача з БД
+ * @returns Публічний об'єкт користувача
+ */
 function mapPublicUser(user: Record<string, unknown>) {
   return {
     id: user.id as number,
@@ -31,6 +45,10 @@ function mapPublicUser(user: Record<string, unknown>) {
   };
 }
 
+/**
+ * Ініціює Google OAuth аутентифікацію
+ * GET /api/auth/google
+ */
 authRouter.get('/google', (req, res, next) => {
   if (!isGoogleOAuthConfigured()) {
     res.status(503).json({ error: 'Google sign-in is not configured' });
@@ -39,6 +57,10 @@ authRouter.get('/google', (req, res, next) => {
   passport.authenticate('google', { scope: ['profile', 'email'], session: false })(req, res, next);
 });
 
+/**
+ * Callback для Google OAuth
+ * GET /api/auth/google/callback
+ */
 authRouter.get(
   '/google/callback',
   (req, res, next) => {

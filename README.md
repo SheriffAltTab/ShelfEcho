@@ -48,6 +48,7 @@ ShelfEcho — це повноцінна вебплатформа для чита
 - SQLite у режимі WAL
 - GitHub Actions
 - SSH-деплой через `appleboy/ssh-action`
+- CloudFlare для CDN, DDoS-захисту та SSL/TLS
 - PM2 для запуску API на сервері
 
 ## Архітектура
@@ -167,6 +168,50 @@ GitHub Secrets для деплою:
 | `GOOGLE_REDIRECT_URI` | Google OAuth callback |
 
 Якщо production API стартує без критичних змінних (`JWT_SECRET`, email або Google OAuth), ініціалізація зупиниться з чіткою помилкою. У development система виводить попередження, а email/Google endpoints повертають контрольовані помилки, якщо сервіс не налаштований.
+
+## CloudFlare
+
+Проєкт використовує CloudFlare для покращення продуктивності та безпеки:
+
+- **CDN**: Розподіл статичного контенту (CSS, JS, зображення) по глобальній мережі
+- **DDoS-захист**: Автоматичний захист від DDoS-атак
+- **SSL/TLS**: Безкоштовний SSL-сертифікат з автоматичним оновленням
+- **Кешування**: Автоматичне кешування статичних ресурсів
+- **Firewall**: WAF (Web Application Firewall) для блокування шкідливих запитів
+- **Analytics**: Детальна статистика трафіку та продуктивності
+
+### Налаштування CloudFlare
+
+1. Додайте домен у CloudFlare Dashboard
+2. Оновіть DNS-записи на CloudFlare nameservers
+3. Налаштуйте SSL/TLS режим на "Full (strict)"
+4. Додайте правила Page Rules або Rules для кешування API відповідей
+5. Увімкніть Always Use HTTPS
+6. Налаштуйте Rate Limiting, якщо потрібно
+
+### Важливі headers
+
+CloudFlare передає додаткові headers для ідентифікації трафіку:
+
+- `CF-RAY`: Унікальний ідентифікатор запиту
+- `CF-Connecting-IP`: Справжня IP-адреса клієнта (замість IP CloudFlare)
+- `CF-IPCountry`: Країна клієнта
+- `CF-Visitor`: Інформація про протокол (HTTP/HTTPS)
+
+Для отримання справжньої IP клієнта використовуйте `CF-Connecting-IP` замість `req.ip` у Express middleware.
+
+Бекенд включає middleware, що автоматично встановлює `req.clientIp` на справжню IP клієнта (з `CF-Connecting-IP` якщо доступний, інакше `req.ip`). Оригінальна IP CloudFlare зберігається в `req.cloudflareIp`.
+
+### Перевірка CloudFlare
+
+Після підключення перевірте:
+
+1. HTTPS працює автоматично
+2. Статичні ресурси кешуються (перевірте headers `CF-Cache-Status`)
+3. CF-RAY header присутній у відповідях
+4. SSL-сертифікат валідний (перевірте на sslabs.com)
+
+API endpoint для перевірки: `GET /api/auth/me` - має повертати CF-RAY у headers.
 
 ## Локальний запуск
 
