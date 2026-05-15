@@ -19,7 +19,7 @@ import { userRouter } from './routes/user.js';
 import { uploadRouter } from './routes/upload.js';
 import { recommendationsRouter } from './routes/recommendations.js';
 import { adminRouter } from './routes/admin.js';
-import { quotesRouter } from './routes/quotes.js';
+import { quotesRouter, scheduleDailyKyivQuoteRefresh } from './routes/quotes.js';
 import { registerGooglePassportStrategy } from './lib/passportGoogle.js';
 
 // Отримуємо директорію поточного файлу для роботи з статичними файлами
@@ -80,6 +80,9 @@ app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 
 // Ініціалізуємо базу даних
 initDB();
+
+// Запускаємо щоденне оновлення цитати о 00:00 за Києвом
+scheduleDailyKyivQuoteRefresh(0, 0);
 
 // Підключаємо всі API маршрути
 app.use('/api/auth', authRouter);
