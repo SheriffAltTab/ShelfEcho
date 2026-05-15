@@ -8,7 +8,7 @@ import {
 } from 'recharts';
 import {
   BarChart3, Settings, Shield, Activity, Users, Search,
-  AlertTriangle, Trash2, Eye, Ban, RefreshCw,
+  AlertTriangle, Trash2, Eye, Ban, RefreshCw, Globe,
 } from 'lucide-react';
 import { useAuth } from '@/features/auth/model/authContext';
 import apiClient from '@/shared/api/apiClient';
@@ -725,9 +725,9 @@ function UsersPanel({ isSuperadmin, currentUserId }: { isSuperadmin: boolean; cu
             <div className="flex items-center gap-2 mb-0.5 flex-wrap">
               <span className="text-sm font-medium text-gray-800">{u.name}</span>
               {u.isGoogleUser ? (
-                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-600 text-white text-[11px] font-bold">
-                  G
-                </span>
+                <div className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-50 text-blue-600">
+                  <Globe size={16} />
+                </div>
               ) : null}
               <Badge>{u.role}</Badge>
               {u.blocked ? <Badge variant="danger">Blocked</Badge> : <Badge variant="success">Not Blocked</Badge>}
