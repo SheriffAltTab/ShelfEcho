@@ -64,4 +64,4 @@ jobs:
             npm install
             npm run build
             
-            pm2 restart shelfecho || pm2 start dist/index.js --name "shelfecho"
+            pm2 restart shelfecho || pm2 start dist/index.js --name "shelfecho" 
