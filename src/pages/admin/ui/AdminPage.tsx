@@ -725,8 +725,8 @@ function UsersPanel({ isSuperadmin, currentUserId }: { isSuperadmin: boolean; cu
             <div className="flex items-center gap-2 mb-0.5 flex-wrap">
               <span className="text-sm font-medium text-gray-800">{u.name}</span>
               {u.isGoogleUser ? (
-                <span className="inline-flex items-center rounded-full bg-blue-100 text-blue-700 text-[11px] font-semibold uppercase tracking-[0.12em] px-2 py-1">
-                  Google
+                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-600 text-white text-[11px] font-bold">
+                  G
                 </span>
               ) : null}
               <Badge>{u.role}</Badge>

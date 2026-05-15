@@ -34,6 +34,7 @@ export function registerGooglePassportStrategy(): void {
         try {
           const email = profile.emails?.[0]?.value;
           const sub = profile.id;
+          const picture = profile.photos?.[0]?.value;
           if (!email || !sub) {
             done(new Error('Google profile missing email'));
             return;
@@ -42,6 +43,7 @@ export function registerGooglePassportStrategy(): void {
             sub,
             email,
             name: profile.displayName || email.split('@')[0] || 'Reader',
+            picture: picture || undefined,
           });
           if (!result) {
             done(new Error('Could not sign in with Google'));
