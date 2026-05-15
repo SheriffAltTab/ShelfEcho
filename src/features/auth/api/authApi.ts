@@ -129,3 +129,7 @@ export async function updateProfile(updates: {
   const { data } = await apiClient.put('/user/profile', updates);
   return data;
 }
+
+export async function deleteAccount(): Promise<void> {
+  await apiClient.delete('/user/account');
+}

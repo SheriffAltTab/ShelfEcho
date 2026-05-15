@@ -1,8 +1,9 @@
 import type { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import db from './db.js';
+import { env } from './config/env.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'shelfecho-secret-key-change-in-production';
+const JWT_SECRET = env.jwtSecret;
 
 export type UserRole = 'user' | 'moderator' | 'content_manager' | 'superadmin';
 
@@ -25,6 +26,10 @@ export function authMiddleware(req: AuthRequest, res: Response, next: NextFuncti
 
     // Check if user is blocked
     const user = db.prepare('SELECT role, blocked, is_active FROM users WHERE id = ?').get(decoded.userId) as any;
+    if (!user) {
+      res.status(401).json({ error: 'Invalid token' });
+      return;
+    }
     if (user?.blocked) {
       res.status(403).json({ error: 'Account is blocked' });
       return;

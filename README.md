@@ -1,191 +1,347 @@
 # ShelfEcho
 
-**ShelfEcho** — повноцінний застосунок для читачів: особиста бібліотека, списки «Хочу / Читаю / Прочитано», обране, коментарі з модерацією, пошук через Open Library, персональні рекомендації з гібридним скорингом та адмін-панель з налаштуванням ваг рекомендацій.
+ShelfEcho — це повноцінна вебплатформа для читачів: персональна книжкова полиця, пошук книжок через OpenLibrary, рекомендації, профілі, відгуки, обране, цілі читання, досягнення та адміністративна панель для модерації й налаштування рекомендацій.
 
-Публічний сайт: [shelfecho.site](https://shelfecho.site)  
-Репозиторій: React (Vite) + Express + SQLite; продакшен орієнтований на **AWS**.
+Проєкт написаний на TypeScript і складається з React/Vite фронтенду та Express/Node.js бекенду із SQLite. Продакшн-деплой виконується через GitHub Actions на AWS/EC2 або сумісний SSH-хост без хардкоду секретів.
 
----
+## Основні можливості
 
-## Зміст
+- Реєстрація, вхід, JWT-сесії, підтвердження email і скидання пароля.
+- OAuth-вхід через Google із офіційною кнопкою Google.
+- Онбординг із вибором улюблених жанрів і річної читацької цілі.
+- Пошук книжок, сторінки деталей, сторінки авторів і інтеграція з OpenLibrary.
+- Особиста бібліотека зі статусами `want`, `reading`, `read`, прогресом, сторінками й рейтингом.
+- Обрані книжки, коментарі, оцінки, спойлер-позначки та скарги.
+- Публічні профілі користувачів із ролями й досягненнями.
+- Вкладка Discover із гібридною системою рекомендацій і поясненням “Why this book?”.
+- Адмін-панель із дашбордом, аналітикою, модерацією, керуванням користувачами та налаштуванням ваг рекомендацій.
+- Повний “Right to be Forgotten”: користувач або модератор може видалити акаунт, а персональні дані стираються каскадно.
 
-1. [Стек технологій](#1-стек-технологій)  
-2. [Швидкий старт (локально)](#2-швидкий-старт-локально)  
-3. [Змінні середовища](#3-змінні-середовища)  
-4. [Gmail і пароль додатка (App Password)](#4-gmail-і-пароль-додатка-app-password)  
-5. [Google OAuth (Passport)](#5-google-oauth-passport)  
-6. [Гібридний рушій рекомендацій](#6-гібридний-рушій-рекомендацій)  
-7. [Discover: оновлення та пояснення](#7-discover-оновлення-та-пояснення)  
-8. [Кеш і продуктивність](#8-кеш-і-продуктивність)  
-9. [Структура репозиторію](#9-структура-репозиторію)  
-10. [Огляд API](#10-огляд-api)  
-11. [Деплой на AWS (коротко)](#11-деплой-на-aws-коротко)  
+## Технології
 
----
+Фронтенд:
 
-## 1. Стек технологій
+- React 19
+- Vite 7
+- TypeScript
+- React Router
+- Framer Motion
+- Recharts
+- Lucide React
+- Tailwind CSS 4
+- Axios
 
-| Шар | Технології |
-|-----|------------|
-| **Фронтенд** | React 19, TypeScript, Vite 7, React Router 7, Tailwind CSS 4, Axios, Framer Motion, Recharts (адмінка) |
-| **Бекенд** | Node.js, Express 5, TypeScript, better-sqlite3, bcryptjs, jsonwebtoken, multer, **Passport** + **passport-google-oauth20**, Nodemailer |
-| **Дані книг** | Open Library API (пошук, обкладинки, subjects); локальний кеш subjects у SQLite |
+Бекенд:
 
----
+- Node.js
+- Express 5
+- TypeScript
+- better-sqlite3
+- JWT
+- bcryptjs
+- Passport Google OAuth 2.0
+- Nodemailer
+- Multer
 
-## 2. Швидкий старт (локально)
+Інфраструктура:
 
-**Вимоги:** Node.js 18+.
+- SQLite у режимі WAL
+- GitHub Actions
+- SSH-деплой через `appleboy/ssh-action`
+- PM2 для запуску API на сервері
 
-```bash
-git clone <repo-url>
-cd ShelfEcho
-npm install
-cd server && npm install && cd ..
-npm run dev
-```
-
-- Фронт: [http://localhost:5173](http://localhost:5173)  
-- API: [http://localhost:3001](http://localhost:3001) — у режимі розробки Vite проксує `/api` та `/uploads` на бекенд, тому `VITE_API_URL` часто не потрібен.
-
-Окремі скрипти: `npm run dev:client`, `npm run dev:server`, `npm run build`, `npm run lint`.
-
-Шаблон змінних для API: [server/.env.example](server/.env.example). Скопіюйте в `server/.env` і заповніть секрети.
-
----
-
-## 3. Змінні середовища
-
-### Фронтенд (корінь, опційно `.env`)
-
-| Змінна | Опис |
-|--------|------|
-| `VITE_API_URL` | Базовий URL API у продакшені (наприклад `https://shelfecho.site/api` або `https://api.example.com`). Можна з суфіксом `/api` або без — клієнт нормалізує `baseURL`. |
-
-### Бекенд (`server/.env`)
-
-Див. повний перелік у [server/.env.example](server/.env.example): `JWT_SECRET`, `FRONTEND_URL`, **Google OAuth**, **Gmail або SMTP**, `PORT`, `HOST`.
-
----
-
-## 4. Gmail і пароль додатка (App Password)
-
-Щоб надсилати листи підтвердження та скидання пароля через **Gmail** (наприклад `sheriffalttab@gmail.com`):
-
-1. Увійдіть у [Google Обліковий запис](https://myaccount.google.com/) → **Безпека**.  
-2. Увімкніть **Двоетапну перевірку** (2-Step Verification) — без неї App Password недоступні.  
-3. **Безпека** → **Паролі додатків** (App passwords) → створіть пароль для типу **Пошта** / пристрій «Інший».  
-4. Скопіюйте **16-символьний** пароль (пробіли можна ігнорувати).  
-5. У `server/.env` встановіть:
-
-```env
-GMAIL_USER=sheriffalttab@gmail.com
-GMAIL_APP_PASSWORD=xxxx xxxx xxxx xxxx
-EMAIL_FROM=sheriffalttab@gmail.com
-```
-
-**Чому не звичайний пароль від Gmail?** Google забороняє використовувати основний пароль облікового запису для SMTP-клієнтів; дозволені лише **OAuth2 для пошти** або **пароль додатка** після увімкнення 2FA.
-
-Альтернатива: будь-який SMTP (`SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`) — наприклад **Amazon SES**.
-
-Реалізація в коді: [server/src/lib/mail.ts](server/src/lib/mail.ts) — пріоритет має пара `GMAIL_USER` + `GMAIL_APP_PASSWORD` (транспорт `smtp.gmail.com:465`), інакше використовується загальний SMTP.
-
----
-
-## 5. Google OAuth (Passport)
-
-У проєкті використовується **Express**, а не Next.js — тому **NextAuth.js тут не застосовується**. Вхід через Google реалізовано через **Passport** і стратегію `passport-google-oauth20`.
-
-1. [Google Cloud Console](https://console.cloud.google.com/) → **APIs & Services** → **Credentials** → **Create credentials** → **OAuth client ID** → тип **Web application**.  
-2. У полі **Authorized redirect URIs** додайте **точно** той самий URL, що й `GOOGLE_REDIRECT_URI` у `.env` (локально часто `http://localhost:3001/api/auth/google/callback`).  
-3. Скопіюйте **Client ID** та **Client secret** у `GOOGLE_CLIENT_ID` та `GOOGLE_CLIENT_SECRET`.
-
-Маршрути: `GET /api/auth/google` (редирект на Google), `GET /api/auth/google/callback` (обробка, редирект на фронт з JWT у фрагменті `#token=...`).
-
-Код: [server/src/lib/passportGoogle.ts](server/src/lib/passportGoogle.ts), [server/src/routes/auth.ts](server/src/routes/auth.ts), [server/src/index.ts](server/src/index.ts) (`passport.initialize()`).
-
-Якщо змінні Google не задані, `GET /api/auth/google` повертає `503` з повідомленням про відсутність конфігурації.
-
----
-
-## 6. Гібридний рушій рекомендацій
-
-Чотири ваги з адмін-панелі зберігаються в SQLite (`settings.rec_weights`): **genre**, **subject**, **author**, **collaborative**. Після кожного збереження в адмінці наступний запит до API вже читає **актуальні** значення з бази (окремого кешу відповіді рекомендацій немає).
-
-### Математика (featured / Discover)
-
-1. Для кожного кандидата в пулі обчислюються **сирі** метрики (перетин subjects з улюбленими жанрами, перетин з subject-профілем користувача, збіг автора, collaborative score).  
-2. У межах **одного запиту** застосовується **min–max нормалізація** кожної метрики по всьому пулу кандидатів → значення в діапазоні приблизно `[0, 1]`.  
-3. Підсумковий бал:  
-   `final = w_g·n_g + w_s·n_s + w_a·n_a + w_c·n_c`,  
-   де `(w_g, w_s, w_a, w_c)` — нормалізовані ваги з адмінки (сума = 1).
-
-Реалізація: [server/src/lib/hybridRecScore.ts](server/src/lib/hybridRecScore.ts), використання в [server/src/routes/recommendations.ts](server/src/routes/recommendations.ts).  
-Блок «Because you liked…» сортується через ту ж нормалізацію (`sortContentBasedBooks`).
-
----
-
-## 7. Discover: оновлення та пояснення
-
-- Кнопка **Refresh** надсилає новий запит з параметром **`exclude`** — список ключів книг, які вже показані в каруселі, щоб бекенд повернув **наступну** найкращу порцію без повторів.  
-- Для кожної книги API повертає **`primarySignal`** (який внесок найбільший) і масив **`explanationTags`** (короткі мітки на кшталт «Genre: Fantasy», «Readers like you»).
-
-Фронтенд: [src/pages/discover/ui/DiscoverPage.tsx](src/pages/discover/ui/DiscoverPage.tsx), клієнт: [src/features/recommendations/api/recommendationsApi.ts](src/features/recommendations/api/recommendationsApi.ts).
-
----
-
-## 8. Кеш і продуктивність
-
-| Що | Поведінка |
-|----|-----------|
-| **GET /api/books/popular-now** | In-memory TTL ~90 с ([server/src/routes/books.ts](server/src/routes/books.ts)) |
-| **GET /api/quotes/daily** | Кеш 24 год у `settings` + короткий in-memory шар ([server/src/routes/quotes.ts](server/src/routes/quotes.ts)) |
-| **Тренди / subject / details** | Існуючий TTL-кеш у `books` роутері |
-| **SQLite** | Індекси на `reading_list`, `favorites`, `not_interested`, `comments` тощо — [server/src/db.ts](server/src/db.ts) |
-| **Featured enrichment** | Open Library запити обмежені батчами по 3 паралельно |
-| **Фронт** | `React.lazy` для **Admin** та **Discover** ([src/app/routes/AppRouter.tsx](src/app/routes/AppRouter.tsx)); обкладинки на Discover з `loading="lazy"` |
-
----
-
-## 9. Структура репозиторію
+## Архітектура
 
 ```
 ShelfEcho/
-├── src/                 # React SPA (сторінки, features, entities, shared, widgets)
-├── server/src/          # Express API, db.ts, middleware, routes, lib/
-├── server/.env.example  # Шаблон конфігурації API
-└── package.json         # Кореневі скрипти та залежності фронту
+├─ src/                         # React застосунок
+│  ├─ app/                       # маршрути, глобальні стилі
+│  ├─ pages/                     # сторінки: auth, discover, admin, profile тощо
+│  ├─ features/                  # auth, recommendations, favorites, comments
+│  ├─ entities/                  # типи користувача й книжки
+│  └─ shared/                    # API-клієнт, UI, конфігурація, утиліти
+├─ server/
+│  ├─ src/
+│  │  ├─ routes/                 # Express маршрути
+│  │  ├─ lib/                    # пошта, Google OAuth, рекомендації, видалення акаунтів
+│  │  ├─ config/env.ts           # типізована runtime-конфігурація
+│  │  ├─ db.ts                   # SQLite schema + міграції + індекси
+│  │  └─ index.ts                # ініціалізація API
+│  ├─ uploads/                   # локальні аватари
+│  └─ shelfecho.db               # SQLite база
+└─ .github/workflows/deploy.yml  # продакшн-деплой
 ```
 
-Аліас імпортів: `@/` → `src/`.
+## Рекомендаційний рушій
 
----
+Discover використовує гібридну вагову систему. Адміністратор задає 4 ваги від `0` до `100`:
 
-## 10. Огляд API
+- Genre Weight
+- Author Weight
+- Subject Weight
+- Collaborative Weight
 
-Усі захищені маршрути (крім логіну/реєстрації) очікують заголовок `Authorization: Bearer <jwt>`.
+Бекенд нормалізує ваги так, щоб їхня сума дорівнювала `1`. Для кожної книжки рахуються 4 сигнали:
 
-| Префікс | Призначення |
-|---------|-------------|
-| `/api/auth/*` | Реєстрація, логін, `me`, Google, verify-email, forgot/reset password |
-| `/api/books/*` | Пошук, деталі, trending, subject, **popular-now** |
-| `/api/recommendations/*` | **featured** (параметри `page`, `pageSize`, `exclude`), content-based, collaborative, not-interested |
-| `/api/quotes/daily` | Цитата дня |
-| `/api/favorites`, `/reading-list`, `/comments`, `/user`, `/upload` | Основна логіка користувача |
-| `/api/admin/*` | Статистика, модерація, користувачі, **rec-weights** |
+- `genre`: збіг із улюбленими жанрами користувача;
+- `author`: збіг із авторами, яких користувач читав або додавав в обране;
+- `subject`: схожі теми з книжок на полиці;
+- `collaborative`: книжки від читачів із подібними полицями.
 
----
+Фінальна оцінка:
 
-## 11. Деплой на AWS (коротко)
+```
+score =
+  normalizedGenreWeight * genreScore +
+  normalizedAuthorWeight * authorScore +
+  normalizedSubjectWeight * subjectScore +
+  normalizedCollaborativeWeight * collaborativeScore
+```
 
-- **Статика:** збірка Vite → **S3** + **CloudFront** (SPA: помилка 404 → `index.html` за потреби).  
-- **API:** **EC2** / **ECS Fargate** (довгоживучий Node-процес).  
-- **SQLite:** придатний для одного інстансу з диском (EBS); для кількох реплік потрібен спільний диск (**EFS**) або **RDS**.  
-- **Секрети:** **AWS Secrets Manager** або **SSM Parameter Store**.  
-- **Пошта:** **SES** (або Gmail для невеликих обсягів з App Password).
+Кандидати збираються з кількох джерел: OpenLibrary subjects, OpenLibrary author search, локальні reading-list/favorites дані та collaborative SQL-запити. Результати кешуються на короткий час, а кеш рекомендацій інвалідовується після:
 
----
+- зміни ваг у адмін-панелі;
+- оновлення жанрів користувача;
+- додавання, оновлення або видалення книжок у reading list;
+- зміни favorites;
+- позначки `Not Interested`;
+- видалення акаунта;
+- ручного `Clear Cache` в адмін-панелі.
+
+API також повертає `primarySignal`, `explanationTags`, `whyThisBook` і `hybridScore`, тому UI показує пояснення на кшталт “Based on your favorite authors”.
+
+## Ролі
+
+- `user`: звичайний користувач.
+- `moderator`: модерація скарг, блокування та видалення звичайних користувачів.
+- `content_manager`: статистика, системне здоров’я, налаштування рекомендацій.
+- `superadmin`: повний доступ, включно зі зміною ролей.
+
+Перший користувач автоматично стає `superadmin`, якщо у базі ще немає superadmin.
+
+## Змінні середовища
+
+Секрети не хардкодяться. Для локальної розробки скопіюйте приклади:
+
+```powershell
+Copy-Item .env.example .env
+Copy-Item server\.env.example server\.env
+```
+
+Фронтенд `.env`:
+
+| Змінна | Опис |
+| --- | --- |
+| `VITE_API_URL` | URL API, наприклад `http://localhost:3001` або `https://shelfecho.site/api` |
+
+Бекенд `server/.env`:
+
+| Змінна | Опис |
+| --- | --- |
+| `NODE_ENV` | `development` або `production` |
+| `PORT` | порт API, типово `3001` |
+| `BIND_HOST` | адреса bind для Express, типово `0.0.0.0` |
+| `FRONTEND_URL` | URL фронтенду для CORS, email-посилань і OAuth redirect |
+| `JWT_SECRET` | секрет для JWT; у production обов’язковий |
+| `EMAIL_FROM` | адреса відправника листів |
+| `GMAIL_USER` | Gmail-акаунт для Nodemailer |
+| `GMAIL_APP_PASSWORD` | Gmail App Password, не звичайний пароль |
+| `GOOGLE_CLIENT_ID` | Google OAuth client ID |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth client secret |
+| `GOOGLE_REDIRECT_URI` | callback URL, наприклад `https://shelfecho.site/api/auth/google/callback` |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` | альтернативний SMTP-провайдер замість Gmail |
+
+GitHub Secrets для деплою:
+
+| Secret | Для чого |
+| --- | --- |
+| `HOST` | SSH-хост AWS/EC2 |
+| `USERNAME` | SSH-користувач |
+| `SSH_KEY` | приватний SSH-ключ |
+| `JWT_SECRET` | production JWT secret |
+| `EMAIL_FROM` | email відправника |
+| `GMAIL_USER` | Gmail SMTP користувач |
+| `GMAIL_APP_PASSWORD` | Gmail App Password |
+| `GOOGLE_CLIENT_ID` | Google OAuth client ID |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth client secret |
+| `GOOGLE_REDIRECT_URI` | Google OAuth callback |
+
+Якщо production API стартує без критичних змінних (`JWT_SECRET`, email або Google OAuth), ініціалізація зупиниться з чіткою помилкою. У development система виводить попередження, а email/Google endpoints повертають контрольовані помилки, якщо сервіс не налаштований.
+
+## Локальний запуск
+
+Встановіть залежності у корені та в бекенді:
+
+```powershell
+npm install
+cd server
+npm install
+cd ..
+```
+
+Запуск у режимі розробки:
+
+```powershell
+npm run dev
+```
+
+Окремо:
+
+```powershell
+npm run dev:client
+npm run dev:server
+```
+
+Якщо PowerShell блокує `npm.ps1`, використовуйте:
+
+```powershell
+npm.cmd run dev
+npm.cmd run build
+```
+
+Типові адреси:
+
+- фронтенд: `http://localhost:5173`
+- API: `http://localhost:3001`
+
+## Скрипти
+
+Корінь:
+
+| Команда | Опис |
+| --- | --- |
+| `npm run dev` | фронтенд + бекенд одночасно |
+| `npm run dev:client` | тільки Vite |
+| `npm run dev:server` | тільки Express API |
+| `npm run build` | TypeScript build + Vite production build |
+| `npm run lint` | ESLint |
+| `npm run preview` | preview зібраного фронтенду |
+
+Бекенд:
+
+| Команда | Опис |
+| --- | --- |
+| `npm run dev` | `tsx watch src/index.ts` |
+| `npm run build` | компіляція TypeScript у `server/dist` |
+| `npm run start` | запуск `server/dist/index.js` |
+
+## База даних
+
+SQLite створюється автоматично у `server/shelfecho.db`. Основні таблиці:
+
+- `users`
+- `favorites`
+- `reading_list`
+- `comments`
+- `not_interested`
+- `subjects_cache`
+- `user_achievements`
+- `comment_reports`
+- `search_logs`
+- `settings`
+
+`initDB()` створює таблиці, виконує легкі міграції та додає індекси для гарячих запитів: reading list, favorites, comments, reports, search logs і users.
+
+## API огляд
+
+Auth:
+
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `GET /api/auth/me`
+- `GET /api/auth/verify-email`
+- `POST /api/auth/forgot-password`
+- `POST /api/auth/reset-password`
+- `GET /api/auth/google`
+- `GET /api/auth/google/callback`
+
+User:
+
+- `PUT /api/user/onboard`
+- `PUT /api/user/profile`
+- `DELETE /api/user/account`
+- `GET /api/user/stats`
+- `POST /api/user/achievements/sync`
+- `GET /api/user/:id/profile`
+- `GET /api/user/genre-breakdown`
+
+Recommendations:
+
+- `GET /api/recommendations/featured?page=0&pageSize=8`
+- `GET /api/recommendations/content-based?page=0&pageSize=10`
+- `GET /api/recommendations/collaborative?page=0&pageSize=10`
+- `POST /api/recommendations/not-interested`
+- `GET /api/recommendations/not-interested`
+
+Admin:
+
+- `GET /api/admin/rec-weights`
+- `PUT /api/admin/rec-weights`
+- `POST /api/admin/cache/clear`
+- `GET /api/admin/users?page=0&pageSize=20&q=...`
+- `DELETE /api/admin/users/:id`
+- `PUT /api/admin/users/:id/block`
+- `PUT /api/admin/users/:id/role`
+- `GET /api/admin/users/:id/activity`
+- `GET /api/admin/moderation/reports`
+- `PUT /api/admin/moderation/:commentId`
+- `GET /api/admin/search-analytics`
+
+Books:
+
+- `GET /api/books/search`
+- `GET /api/books/details`
+- `GET /api/books/trending`
+- `GET /api/books/subject/:subject`
+- `GET /api/books/popular-now`
+- `GET /api/books/author-info`
+
+## Видалення акаунта
+
+Self-service видалення доступне у профілі користувача через Settings. Адмінське видалення доступне в `Community & Moderation > Users`.
+
+Після підтвердження:
+
+- видаляється запис `users`;
+- каскадно стираються reading list, favorites, comments, reports, achievements і not interested;
+- вручну очищається `search_logs`, бо це аналітична таблиця без FK;
+- локальний аватар із `server/uploads` видаляється, якщо він належить цьому застосунку;
+- JWT стає недійсним, бо користувача більше немає в базі.
+
+## Деплой
+
+Workflow `.github/workflows/deploy.yml` запускається при push у `master`:
+
+1. Підключається до хоста через SSH.
+2. Оновлює код із `origin/master`.
+3. Створює `.env` для фронтенду.
+4. Встановлює залежності та збирає фронтенд.
+5. Створює `server/.env` із GitHub Secrets.
+6. Збирає бекенд.
+7. Перезапускає PM2 процес `shelfecho`.
+
+Перед деплоєм додайте всі GitHub Secrets із розділу “Змінні середовища”.
+
+## Продуктивність
+
+- Рекомендації кешуються коротким TTL і не перераховуються повністю на кожен запит.
+- OpenLibrary subject/author/details відповіді кешуються у пам’яті, а subjects книжок додатково зберігаються в SQLite.
+- Discover endpoints підтримують server-side pagination.
+- Admin users list використовує server-side pagination і search.
+- SQLite має індекси для найчастіших запитів.
+- Discover Refresh передає `refresh` ключ і виключає поточні книжки, тому користувач отримує новий набір із того самого вагового рушія.
+
+## Перевірка
+
+```powershell
+cd server
+npm.cmd run build
+cd ..
+npm.cmd run build
+```
+
+Очікувано Vite може попередити про великий chunk. Це не блокує build, але для майбутньої оптимізації варто винести важкі частини у додаткові chunks.
 
 ## Ліцензія
 
-Приватний проєкт. Усі права захищені.
+Проєкт приватний. Перед публічним використанням додайте потрібну ліцензію та перевірте умови OpenLibrary API.

@@ -53,8 +53,9 @@ export function DiscoverPage() {
     setCollabLoading(true);
 
     const excludeFeatured = refreshFeatured ? featuredKeysRef.current : [];
+    const refreshKey = refreshFeatured ? String(Date.now()) : '';
 
-    getFeaturedRecommendations(0, 8, excludeFeatured)
+    getFeaturedRecommendations(0, 8, excludeFeatured, refreshKey)
       .then(({ books, hasMore }) => {
         setFeaturedBooks(books);
         setFeaturedHasMore(hasMore);
@@ -65,12 +66,12 @@ export function DiscoverPage() {
       })
       .finally(() => setFeaturedLoading(false));
 
-    getContentBasedRecommendations()
+    getContentBasedRecommendations(0, 10)
       .then(({ sections }) => setContentSections(sections))
       .catch(() => setContentSections([]))
       .finally(() => setContentLoading(false));
 
-    getCollaborativeRecommendations()
+    getCollaborativeRecommendations(0, 10)
       .then(({ books }) => setCollabBooks(books))
       .catch(() => setCollabBooks([]))
       .finally(() => setCollabLoading(false));
@@ -94,7 +95,7 @@ export function DiscoverPage() {
       );
       // Refresh featured to get a new book
       setFeaturedLoading(true);
-      const { books } = await getFeaturedRecommendations(0, 8, featuredKeysRef.current);
+      const { books } = await getFeaturedRecommendations(0, 8, featuredKeysRef.current, String(Date.now()));
       setFeaturedBooks(books);
     } catch { /* ignore */ }
     setFeaturedAction('idle');
@@ -113,7 +114,7 @@ export function DiscoverPage() {
       );
       // Refresh featured
       setFeaturedLoading(true);
-      const { books } = await getFeaturedRecommendations(0, 8, featuredKeysRef.current);
+      const { books } = await getFeaturedRecommendations(0, 8, featuredKeysRef.current, String(Date.now()));
       setFeaturedBooks(books);
     } catch { /* ignore */ }
     setFeaturedAction('idle');
@@ -237,6 +238,17 @@ export function DiscoverPage() {
                       ))}
                     </div>
                   </div>
+
+                  {featured.whyThisBook && (
+                    <div className="mb-4 rounded-lg border border-amber/20 bg-amber/8 px-4 py-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-amber-900">
+                        Why this book?
+                      </p>
+                      <p className="mt-1 text-sm text-brown/70">
+                        {featured.whyThisBook}
+                      </p>
+                    </div>
+                  )}
 
                   <h2
                     className="text-2xl sm:text-3xl font-serif font-bold text-brown leading-tight cursor-pointer hover:text-amber-800 transition-colors"

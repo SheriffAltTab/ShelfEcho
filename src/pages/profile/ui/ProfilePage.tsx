@@ -8,11 +8,12 @@ import {
 import {
   Book, Settings, Edit2, Target, TrendingUp, LogOut, Award,
   X, Plus, Check, Camera, Upload, Lock, Mail, ChevronDown, ChevronRight, Shield,
+  Trash2, AlertTriangle,
 } from 'lucide-react';
 import { Button } from '@/shared/ui/Button';
 import { Badge } from '@/shared/ui/Badge';
 import { useAuth } from '@/features/auth/model/authContext';
-import { getUserStats, updateProfile, getGenreBreakdown, syncAchievements } from '@/features/auth/api/authApi';
+import { getUserStats, updateProfile, getGenreBreakdown, syncAchievements, deleteAccount } from '@/features/auth/api/authApi';
 import apiClient from '@/shared/api/apiClient';
 import { GENRE_HIERARCHY } from '@/shared/config/genreHierarchy';
 
@@ -129,6 +130,9 @@ export function ProfilePage() {
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsError, setSettingsError] = useState('');
   const [settingsSuccess, setSettingsSuccess] = useState('');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [accountDeleting, setAccountDeleting] = useState(false);
+  const [accountDeleteError, setAccountDeleteError] = useState('');
 
   // Genre editing (hierarchical: main + secondaries)
   const [editingGenres, setEditingGenres] = useState(false);
@@ -159,6 +163,19 @@ export function ProfilePage() {
   const handleLogout = () => {
     logout();
     navigate('/auth');
+  };
+
+  const handleDeleteAccount = async () => {
+    setAccountDeleting(true);
+    setAccountDeleteError('');
+    try {
+      await deleteAccount();
+      logout();
+      navigate('/auth', { replace: true });
+    } catch (err: any) {
+      setAccountDeleteError(err?.response?.data?.error || 'Failed to delete account');
+      setAccountDeleting(false);
+    }
   };
 
   // ---------- Settings ----------
@@ -626,6 +643,26 @@ export function ProfilePage() {
                 <p className="text-xs text-brown/40 mt-1">Leave blank if you don't want to change password</p>
               </div>
 
+              <div className="border-t border-rose/20 pt-5">
+                <h3 className="text-sm font-bold text-rose flex items-center gap-1 mb-2">
+                  <Trash2 size={14} /> Delete Account
+                </h3>
+                <p className="text-xs text-brown/50 mb-3">
+                  Permanently removes your profile, shelf, favorites, reviews, reports, and search history.
+                </p>
+                <Button
+                  variant="ghost"
+                  leftIcon={<Trash2 size={15} />}
+                  className="text-rose hover:bg-rose/10"
+                  onClick={() => {
+                    setAccountDeleteError('');
+                    setShowDeleteConfirm(true);
+                  }}
+                >
+                  Delete Account
+                </Button>
+              </div>
+
               {settingsError && <p className="text-rose text-sm">{settingsError}</p>}
               {settingsSuccess && <p className="text-teal text-sm font-medium">{settingsSuccess}</p>}
 
@@ -633,6 +670,32 @@ export function ProfilePage() {
                 <Button variant="ghost" onClick={() => setShowSettings(false)} className="flex-1">Cancel</Button>
                 <Button variant="wood" onClick={saveSettings} isLoading={settingsSaving} className="flex-1">Save Changes</Button>
               </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Delete Account Confirmation */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/40 z-[60] flex items-center justify-center p-4" onClick={() => !accountDeleting && setShowDeleteConfirm(false)}>
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-cream rounded-2xl shadow-2xl w-full max-w-md p-8" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start gap-4">
+              <div className="w-11 h-11 rounded-full bg-rose/10 text-rose flex items-center justify-center shrink-0">
+                <AlertTriangle size={22} />
+              </div>
+              <div className="flex-1">
+                <h2 className="text-xl font-serif font-bold text-brown">Delete your account?</h2>
+                <p className="text-sm text-brown/60 mt-2">
+                  This permanently erases your ShelfEcho account and all personal reading data. This action cannot be undone.
+                </p>
+                {accountDeleteError && <p className="text-rose text-sm mt-3">{accountDeleteError}</p>}
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <Button variant="ghost" onClick={() => setShowDeleteConfirm(false)} disabled={accountDeleting} className="flex-1">Cancel</Button>
+              <Button variant="wood" leftIcon={<Trash2 size={16} />} onClick={handleDeleteAccount} isLoading={accountDeleting} className="flex-1 bg-rose hover:bg-rose/90 border-rose">
+                Delete
+              </Button>
             </div>
           </motion.div>
         </div>

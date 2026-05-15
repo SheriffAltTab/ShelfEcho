@@ -207,6 +207,9 @@ export function initDB() {
     CREATE INDEX IF NOT EXISTS idx_comments_book_key ON comments(book_key);
     CREATE INDEX IF NOT EXISTS idx_comment_reports_comment_id ON comment_reports(comment_id);
     CREATE INDEX IF NOT EXISTS idx_search_logs_created_at ON search_logs(created_at);
+    CREATE INDEX IF NOT EXISTS idx_users_name ON users(name);
+    CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+    CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
   `);
 }
 

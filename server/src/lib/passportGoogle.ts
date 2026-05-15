@@ -1,5 +1,6 @@
 import passport from 'passport';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
+import { env } from '../config/env.js';
 import { upsertGoogleUser } from './googleUserUpsert.js';
 
 export interface GoogleAuthUser {
@@ -7,24 +8,20 @@ export interface GoogleAuthUser {
 }
 
 export function googleRedirectUri(): string {
-  return (
-    process.env.GOOGLE_REDIRECT_URI ||
-    `http://localhost:${Number(process.env.PORT) || 3001}/api/auth/google/callback`
-  ).replace(/\/$/, '');
+  return env.google.redirectUri;
 }
 
-/** Register Google OAuth strategy when credentials are present. */
 export function registerGooglePassportStrategy(): void {
-  const clientID = process.env.GOOGLE_CLIENT_ID;
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-  
+  const clientID = env.google.clientId;
+  const clientSecret = env.google.clientSecret;
+
   if (!clientID || !clientSecret) {
-    console.warn('⚠️ ПОПЕРЕДЖЕННЯ: Google OAuth НЕ налаштовано! Відсутні GOOGLE_CLIENT_ID або GOOGLE_CLIENT_SECRET у файлі .env.');
-    return; // Залишаємо early return, але тепер ми хоча б побачимо причину в логах
+    console.warn('[google-oauth] Google OAuth is disabled because GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET is missing.');
+    return;
   }
 
   passport.use(
-    'google', // Явно вказуємо ім'я стратегії
+    'google',
     new GoogleStrategy(
       {
         clientID,
@@ -59,5 +56,5 @@ export function registerGooglePassportStrategy(): void {
 }
 
 export function isGoogleOAuthConfigured(): boolean {
-  return !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+  return env.google.configured;
 }

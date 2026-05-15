@@ -22,12 +22,13 @@ jobs:
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_KEY }}
           # 2. Передаємо їх у скрипт
-          envs: GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET,GOOGLE_REDIRECT_URI,GMAIL_USER,GMAIL_APP_PASSWORD,EMAIL_FROM
+          envs: GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET,GOOGLE_REDIRECT_URI,GMAIL_USER,GMAIL_APP_PASSWORD,EMAIL_FROM,JWT_SECRET
           script: |
             export NVM_DIR="$HOME/.nvm"
             [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
@@ -45,7 +46,10 @@ jobs:
             cd server
             # Записуємо базові налаштування
             echo "PORT=3001" > .env
+            echo "BIND_HOST=0.0.0.0" >> .env
             echo "FRONTEND_URL=https://shelfecho.site" >> .env
+            echo "NODE_ENV=production" >> .env
+            echo "JWT_SECRET=$JWT_SECRET" >> .env
             
             # Додаємо секрети від Google
             echo "GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID" >> .env

@@ -17,6 +17,10 @@ export interface ContentBasedSection {
     coverId?: number;
   };
   books: RecBook[];
+  page?: number;
+  pageSize?: number;
+  total?: number;
+  hasMore?: boolean;
 }
 
 export type PrimarySignal = 'genre' | 'subject' | 'author' | 'collaborative';
@@ -32,16 +36,23 @@ export interface FeaturedBook {
   ratingsCount: number;
   primarySignal?: PrimarySignal;
   explanationTags?: string[];
+  whyThisBook?: string;
   hybridScore?: number;
 }
 
-export async function getContentBasedRecommendations(): Promise<{ sections: ContentBasedSection[] }> {
-  const { data } = await apiClient.get('/recommendations/content-based');
+export async function getContentBasedRecommendations(
+  page = 0,
+  pageSize = 10,
+): Promise<{ sections: ContentBasedSection[]; page: number; pageSize: number }> {
+  const { data } = await apiClient.get('/recommendations/content-based', { params: { page, pageSize } });
   return data;
 }
 
-export async function getCollaborativeRecommendations(): Promise<{ books: RecBook[] }> {
-  const { data } = await apiClient.get('/recommendations/collaborative');
+export async function getCollaborativeRecommendations(
+  page = 0,
+  pageSize = 10,
+): Promise<{ books: RecBook[]; page: number; pageSize: number; total: number; hasMore: boolean }> {
+  const { data } = await apiClient.get('/recommendations/collaborative', { params: { page, pageSize } });
   return data;
 }
 
@@ -49,11 +60,13 @@ export async function getFeaturedRecommendations(
   page = 0,
   pageSize = 8,
   excludeKeys: string[] = [],
-): Promise<{ books: FeaturedBook[]; page: number; pageSize: number; hasMore: boolean }> {
+  refreshKey = '',
+): Promise<{ books: FeaturedBook[]; page: number; pageSize: number; total: number; hasMore: boolean }> {
   const params: Record<string, string | number> = { page, pageSize };
   if (excludeKeys.length > 0) {
     params.exclude = excludeKeys.join(',');
   }
+  if (refreshKey) params.refresh = refreshKey;
   const { data } = await apiClient.get('/recommendations/featured', { params });
   return data;
 }

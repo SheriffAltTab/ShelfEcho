@@ -4,6 +4,8 @@ import db from '../db.js';
 import { authMiddleware, type AuthRequest } from '../middleware.js';
 import type { Response } from 'express';
 import { filterAndNormalizeSubjects } from '../lib/subjects.js';
+import { deleteUserAccount } from '../lib/accountDeletion.js';
+import { invalidateRecommendationCache } from '../lib/recommendationEngine.js';
 
 export const userRouter = Router();
 
@@ -13,6 +15,7 @@ userRouter.put('/onboard', authMiddleware, (req: AuthRequest, res: Response) => 
   db.prepare('UPDATE users SET onboarded = 1, favorite_genres = ?, reading_goal = ? WHERE id = ?')
     .run(JSON.stringify(favoriteGenres || []), readingGoal || 12, req.userId!);
 
+  invalidateRecommendationCache();
   res.json({ success: true });
 });
 
@@ -66,6 +69,7 @@ userRouter.put('/profile', authMiddleware, (req: AuthRequest, res: Response) => 
 
   values.push(req.userId!);
   db.prepare(`UPDATE users SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+  if (favoriteGenres !== undefined) invalidateRecommendationCache();
 
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.userId!) as any;
   res.json({
@@ -134,6 +138,21 @@ userRouter.post('/achievements/sync', authMiddleware, (req: AuthRequest, res: Re
 });
 
 // GET /user/:id/profile — public user profile
+userRouter.delete('/account', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    await deleteUserAccount({
+      targetUserId: req.userId!,
+      actorUserId: req.userId!,
+      actorRole: req.userRole || 'user',
+      selfService: true,
+    });
+    invalidateRecommendationCache();
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(err?.statusCode || 500).json({ error: err?.message || 'Failed to delete account' });
+  }
+});
+
 userRouter.get('/:id/profile', authMiddleware, (req: AuthRequest, res: Response) => {
   const targetId = parseInt(req.params.id as string, 10);
   if (isNaN(targetId)) { res.status(400).json({ error: 'Invalid user id' }); return; }

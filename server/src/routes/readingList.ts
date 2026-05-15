@@ -2,6 +2,7 @@ import { Router } from 'express';
 import db from '../db.js';
 import { authMiddleware, type AuthRequest } from '../middleware.js';
 import type { Response } from 'express';
+import { invalidateRecommendationCache } from '../lib/recommendationEngine.js';
 
 export const readingListRouter = Router();
 
@@ -33,6 +34,7 @@ readingListRouter.post('/', (req: AuthRequest, res: Response) => {
   try {
     db.prepare('INSERT INTO reading_list (user_id, book_key, title, author, cover_id, status, subjects) VALUES (?, ?, ?, ?, ?, ?, ?)')
       .run(req.userId!, bookKey, title, author || '', coverId || null, status, JSON.stringify(subjects || []));
+    invalidateRecommendationCache();
     res.status(201).json({ success: true });
   } catch (err: any) {
     if (err.message?.includes('UNIQUE constraint')) {
@@ -45,6 +47,7 @@ readingListRouter.post('/', (req: AuthRequest, res: Response) => {
       }
       db.prepare('UPDATE reading_list SET status = ? WHERE user_id = ? AND book_key = ?')
         .run(status, req.userId!, bookKey);
+      invalidateRecommendationCache();
       res.json({ success: true, updated: true });
       return;
     }
@@ -96,6 +99,7 @@ readingListRouter.put('/item', (req: AuthRequest, res: Response) => {
 
   values.push(req.userId!, bookKey);
   db.prepare(`UPDATE reading_list SET ${updates.join(', ')} WHERE user_id = ? AND book_key = ?`).run(...values);
+  invalidateRecommendationCache();
 
   const item = db.prepare('SELECT * FROM reading_list WHERE user_id = ? AND book_key = ?').get(req.userId!, bookKey);
   res.json({ success: true, item });
@@ -106,6 +110,7 @@ readingListRouter.delete('/item', (req: AuthRequest, res: Response) => {
   const bookKey = req.query.key as string;
   if (!bookKey) { res.status(400).json({ error: 'key is required' }); return; }
   db.prepare('DELETE FROM reading_list WHERE user_id = ? AND book_key = ?').run(req.userId!, bookKey);
+  invalidateRecommendationCache();
   res.json({ success: true });
 });
 

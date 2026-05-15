@@ -12,16 +12,13 @@
  */
 import nodemailer from 'nodemailer';
 import type { Transporter } from 'nodemailer';
+import { env } from '../config/env.js';
 
-const FROM =
-  process.env.EMAIL_FROM ||
-  process.env.GMAIL_USER ||
-  process.env.SMTP_USER ||
-  'noreply@shelfecho.site';
+const FROM = env.email.from;
 
 function createGmailTransport(): Transporter | null {
-  const user = process.env.GMAIL_USER?.trim();
-  const pass = process.env.GMAIL_APP_PASSWORD?.trim().replace(/\s/g, '');
+  const user = env.email.gmailUser;
+  const pass = env.email.gmailAppPassword;
   if (!user || !pass) return null;
   return nodemailer.createTransport({
     host: 'smtp.gmail.com',
@@ -32,15 +29,15 @@ function createGmailTransport(): Transporter | null {
 }
 
 function createGenericSmtpTransport(): Transporter | null {
-  const host = process.env.SMTP_HOST?.trim();
-  const user = process.env.SMTP_USER?.trim();
-  const pass = process.env.SMTP_PASS?.trim();
+  const host = env.email.smtpHost;
+  const user = env.email.smtpUser;
+  const pass = env.email.smtpPass;
   if (!host || !user || !pass) return null;
   return nodemailer.createTransport({
     host,
-    port: Number(process.env.SMTP_PORT) || 587,
-    secure: process.env.SMTP_SECURE === 'true',
-    requireTLS: process.env.SMTP_REQUIRE_TLS === 'true',
+    port: env.email.smtpPort,
+    secure: env.email.smtpSecure,
+    requireTLS: env.email.smtpRequireTls,
     auth: { user, pass },
   });
 }
@@ -48,6 +45,10 @@ function createGenericSmtpTransport(): Transporter | null {
 /** Returns a transporter: Gmail app-password wins if set, else generic SMTP. */
 export function getMailTransport(): Transporter | null {
   return createGmailTransport() || createGenericSmtpTransport();
+}
+
+export function isMailConfigured(): boolean {
+  return env.email.configured;
 }
 
 export async function sendVerificationEmail(to: string, verifyUrl: string): Promise<boolean> {

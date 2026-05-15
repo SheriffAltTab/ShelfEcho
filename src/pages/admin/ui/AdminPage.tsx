@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { bookPath } from '@/shared/lib/bookKeys';
@@ -56,6 +56,7 @@ interface SearchedUser {
   email: string;
   role: string;
   blocked: boolean;
+  created_at?: string;
 }
 
 interface UserActivity {
@@ -511,7 +512,7 @@ function ModerationSection() {
 
       <AnimatePresence mode="wait">
         {subTab === 'reports' && <ReportsPanel key="reports" />}
-        {subTab === 'users' && <UsersPanel key="users" isSuperadmin={currentUser?.role === 'superadmin'} />}
+        {subTab === 'users' && <UsersPanel key="users" isSuperadmin={currentUser?.role === 'superadmin'} currentUserId={currentUser?.id ?? null} />}
       </AnimatePresence>
     </div>
   );
@@ -591,39 +592,53 @@ function ReportsPanel() {
 
 /* ---------- Users Panel ---------- */
 
-function UsersPanel({ isSuperadmin }: { isSuperadmin: boolean }) {
+function UsersPanel({ isSuperadmin, currentUserId }: { isSuperadmin: boolean; currentUserId: number | null }) {
   const [query, setQuery] = useState('');
-  const [allUsers, setAllUsers] = useState<SearchedUser[]>([]);
+  const [users, setUsers] = useState<SearchedUser[]>([]);
   const [listLoading, setListLoading] = useState(true);
+  const [page, setPage] = useState(0);
+  const [pageSize] = useState(20);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [usersError, setUsersError] = useState('');
   const [activityUser, setActivityUser] = useState<SearchedUser | null>(null);
   const [activity, setActivity] = useState<UserActivity | null>(null);
   const [activityLoading, setActivityLoading] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
+  const loadUsers = useCallback(async (nextPage = page, nextQuery = query) => {
     setListLoading(true);
-    apiClient.get<{ users: SearchedUser[] }>('/admin/users')
-      .then((res) => {
-        if (!cancelled) {
-          const raw = res.data?.users ?? [];
-          setAllUsers(raw.map((u) => ({ ...u, blocked: !!u.blocked })));
-        }
-      })
-      .catch(() => { if (!cancelled) setAllUsers([]); })
-      .finally(() => { if (!cancelled) setListLoading(false); });
-    return () => { cancelled = true; };
-  }, []);
+    setUsersError('');
+    try {
+      const res = await apiClient.get<{
+        users: SearchedUser[];
+        total: number;
+        page: number;
+        pageSize: number;
+        totalPages: number;
+      }>('/admin/users', {
+        params: { page: nextPage, pageSize, q: nextQuery.trim() || undefined },
+      });
+      const raw = res.data?.users ?? [];
+      setUsers(raw.map((u) => ({ ...u, blocked: !!u.blocked })));
+      setTotal(res.data?.total ?? raw.length);
+      setPage(res.data?.page ?? nextPage);
+      setTotalPages(Math.max(1, res.data?.totalPages ?? 1));
+    } catch {
+      setUsers([]);
+      setTotal(0);
+      setTotalPages(1);
+      setUsersError('Failed to load users');
+    } finally {
+      setListLoading(false);
+    }
+  }, [page, pageSize, query]);
 
-  const filteredUsers = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return allUsers;
-    return allUsers.filter((u) => {
-      if (String(u.id) === q) return true;
-      if (u.name.toLowerCase().includes(q)) return true;
-      if (u.email.toLowerCase().includes(q)) return true;
-      return false;
-    });
-  }, [allUsers, query]);
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      loadUsers(page, query);
+    }, 250);
+    return () => window.clearTimeout(handle);
+  }, [loadUsers, page, query]);
 
   const handleViewActivity = async (u: SearchedUser) => {
     setActivityUser(u);
@@ -645,7 +660,7 @@ function UsersPanel({ isSuperadmin }: { isSuperadmin: boolean }) {
   const handleBlockToggle = async (u: SearchedUser) => {
     try {
       await apiClient.put(`/admin/users/${u.id}/block`, { blocked: !u.blocked });
-      setAllUsers((prev) =>
+      setUsers((prev) =>
         prev.map((usr) => (usr.id === u.id ? { ...usr, blocked: !usr.blocked } : usr)),
       );
     } catch { /* ignore */ }
@@ -654,17 +669,32 @@ function UsersPanel({ isSuperadmin }: { isSuperadmin: boolean }) {
   const handleRoleChange = async (u: SearchedUser, newRole: string) => {
     try {
       await apiClient.put(`/admin/users/${u.id}/role`, { role: newRole });
-      setAllUsers((prev) =>
+      setUsers((prev) =>
         prev.map((usr) => (usr.id === u.id ? { ...usr, role: newRole } : usr)),
       );
     } catch { /* ignore */ }
+  };
+
+  const handleDeleteUser = async (u: SearchedUser) => {
+    if (!window.confirm(`Delete ${u.name}'s account? This permanently removes their data.`)) return;
+    try {
+      await apiClient.delete(`/admin/users/${u.id}`);
+      if (activityUser?.id === u.id) {
+        setActivityUser(null);
+        setActivity(null);
+      }
+      const nextPage = users.length === 1 && page > 0 ? page - 1 : page;
+      await loadUsers(nextPage, query);
+    } catch (err: any) {
+      setUsersError(err?.response?.data?.error || 'Failed to delete user');
+    }
   };
 
   if (listLoading) return <Spinner />;
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-4">
-      {/* Client-side filter */}
+      {/* Server-side filter */}
       <div className="flex gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -672,18 +702,22 @@ function UsersPanel({ isSuperadmin }: { isSuperadmin: boolean }) {
             type="text"
             placeholder="Filter by name, email, or user ID…"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setPage(0);
+            }}
             className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
           />
         </div>
       </div>
 
       <p className="text-xs text-gray-500">
-        Showing {filteredUsers.length} of {allUsers.length} users
+        Showing {users.length} of {total} users
       </p>
+      {usersError && <p className="text-sm text-red-500">{usersError}</p>}
 
       {/* Results */}
-      {filteredUsers.map((u) => (
+      {users.map((u) => (
         <Card key={u.id} className="flex flex-col sm:flex-row sm:items-center gap-4">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-0.5 flex-wrap">
@@ -710,6 +744,13 @@ function UsersPanel({ isSuperadmin }: { isSuperadmin: boolean }) {
             >
               <Ban className="w-3.5 h-3.5" /> {u.blocked ? 'Unblock' : 'Block'}
             </button>
+            <button
+              onClick={() => handleDeleteUser(u)}
+              disabled={u.id === currentUserId}
+              className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition disabled:opacity-40 disabled:pointer-events-none"
+            >
+              <Trash2 className="w-3.5 h-3.5" /> Delete
+            </button>
             {isSuperadmin && (
               <select
                 value={u.role}
@@ -725,6 +766,26 @@ function UsersPanel({ isSuperadmin }: { isSuperadmin: boolean }) {
           </div>
         </Card>
       ))}
+
+      <div className="flex items-center justify-between pt-2">
+        <button
+          onClick={() => setPage((p) => Math.max(0, p - 1))}
+          disabled={page <= 0 || listLoading}
+          className="px-3 py-1.5 text-xs font-medium rounded-lg bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:pointer-events-none"
+        >
+          Previous
+        </button>
+        <span className="text-xs text-gray-500">
+          Page {page + 1} of {totalPages}
+        </span>
+        <button
+          onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+          disabled={page >= totalPages - 1 || listLoading}
+          className="px-3 py-1.5 text-xs font-medium rounded-lg bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:pointer-events-none"
+        >
+          Next
+        </button>
+      </div>
 
       {/* Activity Modal / Inline */}
       <AnimatePresence>

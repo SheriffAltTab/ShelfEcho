@@ -2,6 +2,7 @@ import { Router } from 'express';
 import db from '../db.js';
 import { authMiddleware, type AuthRequest } from '../middleware.js';
 import type { Response } from 'express';
+import { invalidateRecommendationCache } from '../lib/recommendationEngine.js';
 
 export const favoritesRouter = Router();
 
@@ -23,6 +24,7 @@ favoritesRouter.post('/', (req: AuthRequest, res: Response) => {
   try {
     db.prepare('INSERT INTO favorites (user_id, book_key, title, author, cover_id) VALUES (?, ?, ?, ?, ?)')
       .run(req.userId!, bookKey, title, author || '', coverId || null);
+    invalidateRecommendationCache();
     res.status(201).json({ success: true });
   } catch (err: any) {
     if (err.message?.includes('UNIQUE constraint')) {
@@ -38,6 +40,7 @@ favoritesRouter.delete('/item', (req: AuthRequest, res: Response) => {
   const bookKey = req.query.key as string;
   if (!bookKey) { res.status(400).json({ error: 'key is required' }); return; }
   db.prepare('DELETE FROM favorites WHERE user_id = ? AND book_key = ?').run(req.userId!, bookKey);
+  invalidateRecommendationCache();
   res.json({ success: true });
 });
 

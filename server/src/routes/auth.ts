@@ -4,15 +4,16 @@ import crypto from 'crypto';
 import db from '../db.js';
 import { generateToken, authMiddleware, type AuthRequest } from '../middleware.js';
 import type { Response } from 'express';
-import { sendPasswordResetEmail, sendVerificationEmail } from '../lib/mail.js';
+import { isMailConfigured, sendPasswordResetEmail, sendVerificationEmail } from '../lib/mail.js';
 import passport from 'passport';
 import { isGoogleOAuthConfigured } from '../lib/passportGoogle.js';
+import { emailConfigError, env } from '../config/env.js';
 
 export const authRouter = Router();
 
 // Змінено на функцію: тепер змінна .env зчитується в правильний момент
 function getFrontendUrl() {
-  return (process.env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
+  return env.frontendUrl;
 }
 
 function mapPublicUser(user: Record<string, unknown>) {
@@ -71,6 +72,11 @@ authRouter.post('/register', async (req, res) => {
       return;
     }
 
+    if (!isMailConfigured()) {
+      res.status(503).json({ error: emailConfigError() || 'Email delivery is unavailable' });
+      return;
+    }
+
     const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
     if (existing) {
       res.status(409).json({ error: 'Email already registered' });
@@ -81,13 +87,18 @@ authRouter.post('/register', async (req, res) => {
     const verifyToken = crypto.randomBytes(32).toString('hex');
     const expires = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
 
-    db.prepare(
+    const inserted = db.prepare(
       `INSERT INTO users (name, email, password, onboarded, is_active, email_verification_token, email_verification_expires)
        VALUES (?, ?, ?, 0, 0, ?, ?)`,
     ).run(name, email, hashedPassword, verifyToken, expires);
 
     const verifyUrl = `${getFrontendUrl()}/verify-email?token=${encodeURIComponent(verifyToken)}`;
-    await sendVerificationEmail(email, verifyUrl);
+    const sent = await sendVerificationEmail(email, verifyUrl);
+    if (!sent) {
+      db.prepare('DELETE FROM users WHERE id = ?').run(inserted.lastInsertRowid);
+      res.status(503).json({ error: 'Verification email could not be sent. Please try again later.' });
+      return;
+    }
 
     res.status(201).json({
       needsVerification: true,
@@ -179,6 +190,11 @@ authRouter.post('/forgot-password', async (req, res) => {
     return;
   }
 
+  if (!isMailConfigured()) {
+    res.status(503).json({ error: emailConfigError() || 'Email delivery is unavailable' });
+    return;
+  }
+
   const resetToken = crypto.randomBytes(32).toString('hex');
   const expires = new Date(Date.now() + 60 * 60 * 1000).toISOString();
   db.prepare('UPDATE users SET password_reset_token = ?, password_reset_expires = ? WHERE id = ?').run(
@@ -188,7 +204,11 @@ authRouter.post('/forgot-password', async (req, res) => {
   );
 
   const resetUrl = `${getFrontendUrl()}/reset-password?token=${encodeURIComponent(resetToken)}`;
-  await sendPasswordResetEmail(email.trim(), resetUrl);
+  const sent = await sendPasswordResetEmail(email.trim(), resetUrl);
+  if (!sent) {
+    res.status(503).json({ error: 'Password reset email could not be sent. Please try again later.' });
+    return;
+  }
 
   res.json(generic);
 });

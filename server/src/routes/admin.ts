@@ -3,6 +3,9 @@ import db from '../db.js';
 import { authMiddleware, roleMiddleware, type AuthRequest } from '../middleware.js';
 import type { Response } from 'express';
 import { cache as booksCache } from './books.js';
+import { getRecWeights, setRecWeights } from '../lib/recWeights.js';
+import { clearRecommendationCaches, invalidateRecommendationCache } from '../lib/recommendationEngine.js';
+import { deleteUserAccount } from '../lib/accountDeletion.js';
 
 export const adminRouter = Router();
 adminRouter.use(authMiddleware);
@@ -56,15 +59,15 @@ adminRouter.get('/stats/genre-distribution', roleMiddleware('superadmin', 'conte
 // Access: superadmin, content_manager
 
 adminRouter.get('/rec-weights', roleMiddleware('superadmin', 'content_manager'), (_req: AuthRequest, res: Response) => {
-  const row = db.prepare("SELECT value FROM settings WHERE key = 'rec_weights'").get() as any;
-  res.json({ weights: row ? JSON.parse(row.value) : { genre_weight: 50, author_weight: 50, subject_weight: 50, collaborative_weight: 50 } });
+  res.json({ weights: getRecWeights() });
 });
 
 adminRouter.put('/rec-weights', roleMiddleware('superadmin', 'content_manager'), (req: AuthRequest, res: Response) => {
   const { weights } = req.body;
   if (!weights) { res.status(400).json({ error: 'weights required' }); return; }
-  db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('rec_weights', ?)").run(JSON.stringify(weights));
-  res.json({ success: true, weights });
+  const saved = setRecWeights(weights);
+  invalidateRecommendationCache();
+  res.json({ success: true, weights: saved });
 });
 
 adminRouter.get('/simulate/:userId', roleMiddleware('superadmin', 'content_manager'), (req: AuthRequest, res: Response) => {
@@ -95,8 +98,7 @@ adminRouter.get('/simulate/:userId', roleMiddleware('superadmin', 'content_manag
     `).all(targetId, ...myKeys) as any[];
   }
 
-  const weightsRow = db.prepare("SELECT value FROM settings WHERE key = 'rec_weights'").get() as any;
-  const weights = weightsRow ? JSON.parse(weightsRow.value) : {};
+  const weights = getRecWeights();
 
   res.json({
     user: { id: user.id, name: user.name },
@@ -108,7 +110,7 @@ adminRouter.get('/simulate/:userId', roleMiddleware('superadmin', 'content_manag
       genres: `User has ${favoriteGenres.length} favorite genres: ${favoriteGenres.join(', ') || 'none'}`,
       readingList: `User has ${readingList.length} books in reading list (showing top 10)`,
       collaborative: `Found ${similarUsers.length} similar users based on shared books`,
-      weights: `Current weights: genre=${weights.genre_weight || 50}, author=${weights.author_weight || 50}, subject=${weights.subject_weight || 50}, collaborative=${weights.collaborative_weight || 50}`,
+      weights: `Current weights: genre=${weights.genre_weight}, author=${weights.author_weight}, subject=${weights.subject_weight}, collaborative=${weights.collaborative_weight}`,
     },
   });
 });
@@ -116,6 +118,7 @@ adminRouter.get('/simulate/:userId', roleMiddleware('superadmin', 'content_manag
 adminRouter.post('/cache/clear', roleMiddleware('superadmin', 'content_manager'), (_req: AuthRequest, res: Response) => {
   // Clear in-memory books cache
   booksCache.clear();
+  clearRecommendationCaches();
   // Clear subjects_cache in DB
   db.prepare('DELETE FROM subjects_cache').run();
   res.json({ success: true, message: 'All caches cleared' });
@@ -172,11 +175,36 @@ adminRouter.get('/moderation/reports', roleMiddleware('superadmin', 'moderator')
 // ─── User Management ──────────────────────────────────────────────────
 // Access: superadmin, moderator
 
-adminRouter.get('/users', roleMiddleware('superadmin', 'moderator'), (_req: AuthRequest, res: Response) => {
-  const users = db.prepare(
-    'SELECT id, name, email, avatar, role, blocked, created_at FROM users ORDER BY id ASC',
-  ).all();
-  res.json({ users });
+adminRouter.get('/users', roleMiddleware('superadmin', 'moderator'), (req: AuthRequest, res: Response) => {
+  const page = Math.max(0, parseInt(String(req.query.page ?? '0'), 10) || 0);
+  const pageSize = Math.min(100, Math.max(5, parseInt(String(req.query.pageSize ?? '20'), 10) || 20));
+  const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+  const offset = page * pageSize;
+
+  let users: any[];
+  let total: number;
+  if (q) {
+    const numericQ = parseInt(q, 10);
+    if (!Number.isNaN(numericQ) && String(numericQ) === q) {
+      users = db.prepare(
+        'SELECT id, name, email, avatar, role, blocked, created_at FROM users WHERE id = ? ORDER BY id ASC LIMIT ? OFFSET ?',
+      ).all(numericQ, pageSize, offset) as any[];
+      total = (db.prepare('SELECT COUNT(*) as count FROM users WHERE id = ?').get(numericQ) as any).count;
+    } else {
+      const pattern = `%${q}%`;
+      users = db.prepare(
+        'SELECT id, name, email, avatar, role, blocked, created_at FROM users WHERE name LIKE ? OR email LIKE ? ORDER BY id ASC LIMIT ? OFFSET ?',
+      ).all(pattern, pattern, pageSize, offset) as any[];
+      total = (db.prepare('SELECT COUNT(*) as count FROM users WHERE name LIKE ? OR email LIKE ?').get(pattern, pattern) as any).count;
+    }
+  } else {
+    users = db.prepare(
+      'SELECT id, name, email, avatar, role, blocked, created_at FROM users ORDER BY id ASC LIMIT ? OFFSET ?',
+    ).all(pageSize, offset) as any[];
+    total = (db.prepare('SELECT COUNT(*) as count FROM users').get() as any).count;
+  }
+
+  res.json({ users, total, page, pageSize, totalPages: Math.ceil(total / pageSize) });
 });
 
 adminRouter.get('/users/search', roleMiddleware('superadmin', 'moderator'), (req: AuthRequest, res: Response) => {
@@ -230,6 +258,27 @@ adminRouter.put('/users/:id/role', roleMiddleware('superadmin'), (req: AuthReque
 
 // ─── Search Analytics (System Health) ────────────────────────────────
 // Access: superadmin, content_manager
+
+adminRouter.delete('/users/:id', roleMiddleware('superadmin', 'moderator'), async (req: AuthRequest, res: Response) => {
+  const targetId = parseInt(req.params.id as string, 10);
+  if (isNaN(targetId)) { res.status(400).json({ error: 'Invalid id' }); return; }
+  if (targetId === req.userId) {
+    res.status(400).json({ error: 'Use profile settings to delete your own account.' });
+    return;
+  }
+
+  try {
+    await deleteUserAccount({
+      targetUserId: targetId,
+      actorUserId: req.userId!,
+      actorRole: req.userRole || 'user',
+    });
+    invalidateRecommendationCache();
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(err?.statusCode || 500).json({ error: err?.message || 'Failed to delete account' });
+  }
+});
 
 adminRouter.get('/search-analytics', roleMiddleware('superadmin', 'content_manager'), (_req: AuthRequest, res: Response) => {
   const zeroResults = db.prepare(`

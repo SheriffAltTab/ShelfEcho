@@ -1,7 +1,9 @@
+import { env, validateRuntimeEnv } from './config/env.js';
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import passport from 'passport';
 import { initDB } from './db.js';
 import { authRouter } from './routes/auth.js';
 import { booksRouter } from './routes/books.js';
@@ -13,18 +15,15 @@ import { uploadRouter } from './routes/upload.js';
 import { recommendationsRouter } from './routes/recommendations.js';
 import { adminRouter } from './routes/admin.js';
 import { quotesRouter } from './routes/quotes.js';
-
-import 'dotenv/config';
-import passport from 'passport';
-
-// 1. Імпортуємо нашу функцію конфігурації
 import { registerGooglePassportStrategy } from './lib/passportGoogle.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+validateRuntimeEnv();
+
 const app = express();
-const PORT = Number(process.env.PORT) || 3001;
-const HOST = process.env.HOST || '0.0.0.0';
+const PORT = env.port;
+const HOST = env.bindHost;
 
 const allowedOrigins = [
   'https://shelfecho.site',
@@ -32,17 +31,14 @@ const allowedOrigins = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
 ];
-if (process.env.FRONTEND_URL) allowedOrigins.push(process.env.FRONTEND_URL);
+if (env.frontendUrl) allowedOrigins.push(env.frontendUrl);
+
 app.use(cors({ origin: (origin, cb) => cb(null, !origin || allowedOrigins.includes(origin) ? (origin || true) : false) }));
 app.use(express.json());
-
-// Ініціалізуємо Passport
 app.use(passport.initialize());
 
-// 2. ОБОВ'ЯЗКОВО викликаємо функцію реєстрації стратегії ТУТ
 registerGooglePassportStrategy();
 
-// Serve uploaded files
 app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 
 initDB();
