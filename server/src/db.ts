@@ -169,7 +169,11 @@ export function initDB() {
   if (!recWeights) {
     db.prepare("INSERT INTO settings (key, value) VALUES (?, ?)").run(
       'rec_weights',
-      JSON.stringify({ genre_weight: 50, author_weight: 50, subject_weight: 50, collaborative_weight: 50 })
+      JSON.stringify({
+        genre_weight: 50,
+        author_weight: 50,
+        subject_weight: 50,
+        collaborative_weight: 50 })
     );
   }
 
