@@ -9,7 +9,7 @@ import { fileURLToPath } from 'url';
 
 // Шлях до файлу бази даних
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dbPath = path.join(__dirname, '..', 'shelfecho.db');
+const dbPath = process.env.SHELFECHO_DB_PATH?.trim() || path.join(__dirname, '..', 'shelfecho.db');
 
 // Створюємо з'єднання з БД
 const db = new Database(dbPath);

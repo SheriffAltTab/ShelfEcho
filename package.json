@@ -7,6 +7,10 @@
     "dev": "concurrently \"vite\" \"cd server && npm run dev\"",
     "dev:client": "vite",
     "dev:server": "cd server && npm run dev",
+    "doctor": "cd server && npm run doctor",
+    "test:unit": "cd server && npm run test:unit",
+    "test:integration": "cd server && npm run test:integration",
+    "test:server": "cd server && npm test",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview"

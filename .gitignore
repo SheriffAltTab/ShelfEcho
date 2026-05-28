@@ -23,3 +23,9 @@ dist-ssr
 *.sln
 *.sw?
 /.vs
+
+# Database
+server/shelfecho.db
+server/shelfecho.db-wal
+server/shelfecho.db-shm
+server/shelfecho.db-journal
