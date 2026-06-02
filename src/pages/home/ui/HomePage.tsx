@@ -37,6 +37,18 @@ export function HomePage() {
   const heroBooks = displayPopular ? popularBooks : trendingBooks;
   const heroBook = heroBooks[0];
 
+  useEffect(() => {
+    if (!heroBook) return;
+    const href = getBookCoverUrl(heroBook.coverId, 'M');
+    if (!href) return;
+    const link = document.createElement('link');
+    link.rel = 'preload';
+    link.as = 'image';
+    link.href = href;
+    document.head.appendChild(link);
+    return () => { document.head.removeChild(link); };
+  }, [heroBook]);
+
   const shelfDefinitions = useMemo(() => {
     const fav = (user?.favoriteGenres ?? []).filter(Boolean);
     const favLower = new Set(fav.map((g) => g.toLowerCase().trim()));
@@ -148,6 +160,7 @@ export function HomePage() {
                   author={heroBook.author}
                   coverId={heroBook.coverId}
                   coverColor={getBookColor(heroBook.key)}
+                  loading="eager"
                   className="w-48 sm:w-56 transform rotate-3 group-hover:rotate-0 transition-all duration-500"
                   onClick={() => navigate(bookPath(heroBook.key))}
                 />
@@ -248,7 +261,16 @@ export function HomePage() {
                   <div className="flex gap-4 mb-4">
                     <div className="w-16 h-24 rounded shadow-md flex-shrink-0 overflow-hidden">
                       {coverUrl ? (
-                        <img src={coverUrl} alt={book.title} className="w-full h-full object-cover" />
+                        <img
+                          src={coverUrl}
+                          alt={book.title}
+                          className="w-full h-full object-cover"
+                          width={96}
+                          height={144}
+                          decoding="async"
+                          srcSet={`${getBookCoverUrl(book.cover_id, 'S')} 120w, ${getBookCoverUrl(book.cover_id, 'M')} 240w, ${getBookCoverUrl(book.cover_id, 'L')} 480w`}
+                          sizes="96px"
+                        />
                       ) : (
                         <div className={`w-full h-full bg-gradient-to-br ${getBookColor(book.book_key)}`} />
                       )}

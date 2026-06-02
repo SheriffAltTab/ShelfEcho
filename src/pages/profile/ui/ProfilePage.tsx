@@ -619,26 +619,26 @@ export function ProfilePage() {
             <div className="space-y-5">
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-brown">Display Name</label>
-                <input type="text" value={settingsName} onChange={(e) => setSettingsName(e.target.value)} className="w-full bg-linen border border-brown/10 rounded-xl py-3 px-4 text-brown focus:outline-none focus:ring-2 focus:ring-amber/50" />
+                <input name="displayName" type="text" value={settingsName} onChange={(e) => setSettingsName(e.target.value)} className="w-full bg-linen border border-brown/10 rounded-xl py-3 px-4 text-brown focus:outline-none focus:ring-2 focus:ring-amber/50" />
               </div>
 
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-brown flex items-center gap-1"><Mail size={14} /> Email</label>
-                <input type="email" value={settingsEmail} onChange={(e) => setSettingsEmail(e.target.value)} className="w-full bg-linen border border-brown/10 rounded-xl py-3 px-4 text-brown focus:outline-none focus:ring-2 focus:ring-amber/50" />
+                <input name="email" type="email" value={settingsEmail} onChange={(e) => setSettingsEmail(e.target.value)} className="w-full bg-linen border border-brown/10 rounded-xl py-3 px-4 text-brown focus:outline-none focus:ring-2 focus:ring-amber/50" />
               </div>
 
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-brown">
                   Reading Goal: <span className="font-bold text-amber-700">{settingsGoal} books</span>
                 </label>
-                <input type="range" min="1" max="100" value={settingsGoal} onChange={(e) => setSettingsGoal(parseInt(e.target.value))} className="w-full h-2 bg-brown/10 rounded-lg appearance-none cursor-pointer accent-amber" />
+                <input name="readingGoal" type="range" min="1" max="100" value={settingsGoal} onChange={(e) => setSettingsGoal(parseInt(e.target.value))} className="w-full h-2 bg-brown/10 rounded-lg appearance-none cursor-pointer accent-amber" />
               </div>
 
               <div className="border-t border-brown/10 pt-5">
                 <h3 className="text-sm font-bold text-brown flex items-center gap-1 mb-3"><Lock size={14} /> Change Password</h3>
                 <div className="space-y-2">
-                  <input type="password" placeholder="Current password" value={settingsCurrentPw} onChange={(e) => setSettingsCurrentPw(e.target.value)} className="w-full bg-linen border border-brown/10 rounded-xl py-3 px-4 text-brown placeholder:text-brown/40 focus:outline-none focus:ring-2 focus:ring-amber/50" />
-                  <input type="password" placeholder="New password (min 6 characters)" value={settingsNewPw} onChange={(e) => setSettingsNewPw(e.target.value)} className="w-full bg-linen border border-brown/10 rounded-xl py-3 px-4 text-brown placeholder:text-brown/40 focus:outline-none focus:ring-2 focus:ring-amber/50" />
+                  <input name="currentPassword" type="password" placeholder="Current password" value={settingsCurrentPw} onChange={(e) => setSettingsCurrentPw(e.target.value)} className="w-full bg-linen border border-brown/10 rounded-xl py-3 px-4 text-brown placeholder:text-brown/40 focus:outline-none focus:ring-2 focus:ring-amber/50" />
+                  <input name="newPassword" type="password" placeholder="New password (min 6 characters)" value={settingsNewPw} onChange={(e) => setSettingsNewPw(e.target.value)} className="w-full bg-linen border border-brown/10 rounded-xl py-3 px-4 text-brown placeholder:text-brown/40 focus:outline-none focus:ring-2 focus:ring-amber/50" />
                 </div>
                 <p className="text-xs text-brown/40 mt-1">
                   {user?.isGoogleUser
@@ -723,7 +723,7 @@ export function ProfilePage() {
                   )}
                 </div>
               </div>
-              <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="hidden" onChange={handleFileSelect} />
+              <input name="avatar" ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="hidden" onChange={handleFileSelect} />
               <button onClick={() => fileInputRef.current?.click()} className="w-full flex items-center justify-center gap-2 py-3 px-4 border-2 border-dashed border-brown/20 rounded-xl text-brown/60 hover:border-brown/40 hover:text-brown/80 transition-colors">
                 <Upload size={18} />
                 {photoFile ? photoFile.name : 'Choose an image file'}

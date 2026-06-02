@@ -12,6 +12,7 @@ interface BookCardProps {
   onClick?: () => void;
   showRating?: boolean;
   isLiked?: boolean;
+  loading?: 'lazy' | 'eager';
   onLike?: (e: React.MouseEvent) => void;
 }
 
@@ -25,6 +26,7 @@ export function BookCard({
   onClick,
   showRating = false,
   isLiked = false,
+  loading = 'lazy',
   onLike,
 }: BookCardProps) {
   const coverUrl = getBookCoverUrl(coverId, 'M');
@@ -52,7 +54,12 @@ export function BookCard({
             src={coverUrl}
             alt={title}
             className="absolute inset-0 w-full h-full object-cover rounded-r-md rounded-l-sm"
-            loading="lazy"
+            decoding="async"
+            loading={loading}
+            width={176}
+            height={256}
+            srcSet={`${getBookCoverUrl(coverId, 'S')} 200w, ${getBookCoverUrl(coverId, 'M')} 400w, ${getBookCoverUrl(coverId, 'L')} 800w`}
+            sizes="(max-width: 640px) 144px, 176px"
           />
         ) : (
           <>
