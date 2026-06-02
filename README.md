@@ -393,6 +393,7 @@ Workflow `.github/workflows/deploy.yml` запускається при push у 
 - Admin users list використовує server-side pagination і search.
 - SQLite має індекси для найчастіших запитів.
 - Discover Refresh передає `refresh` ключ і виключає поточні книжки, тому користувач отримує новий набір із того самого вагового рушія.
+- Якщо продакшн-сайт показує попередження про «Protected Audience API is deprecated», це, швидше за все, викликано Cloudflare / Cloudflare Insights, а не вашим React-кодом.
 
 ## Перевірка
 
