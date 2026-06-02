@@ -2,6 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import { initDB } from './db.js';
 import { validateRuntimeEnv } from './config/env.js';
+import passport from 'passport';
+import { registerGooglePassportStrategy } from './lib/passportGoogle.js';
 import { authRouter } from './routes/auth.js';
 import { userRouter } from './routes/user.js';
 import { favoritesRouter } from './routes/favorites.js';
@@ -17,7 +19,13 @@ export function createApp(_options?: { scheduleQuotes?: boolean }) {
   validateRuntimeEnv();
   initDB();
 
+  // Register passport strategies (Google OAuth)
+  registerGooglePassportStrategy();
+
   const app = express();
+
+  // Initialize passport
+  app.use(passport.initialize());
 
   app.use(cors());
   app.use(express.json({ limit: '2mb' }));
