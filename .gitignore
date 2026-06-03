@@ -29,3 +29,9 @@ server/shelfecho.db
 server/shelfecho.db-wal
 server/shelfecho.db-shm
 server/shelfecho.db-journal
+
+# Environment variables (secrets)
+.env
+server/.env
+.env.local
+server/.env.local
