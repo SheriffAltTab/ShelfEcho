@@ -51,7 +51,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { user } = await authApi.getMe();
       setUser(user);
       return user;
-    } catch {
+    } catch (error) {
       // Якщо токен недійсний, видаляємо його
       localStorage.removeItem('shelfecho_token');
       setUser(null);

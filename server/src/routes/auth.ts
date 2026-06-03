@@ -65,6 +65,7 @@ authRouter.get(
   '/google/callback',
   (req, res, next) => {
     // Обгортаємо виклик, щоб використати правильну URL під час помилки
+    console.log('[auth] Google callback initiated');
     passport.authenticate('google', {
       session: false,
       failureRedirect: `${getFrontendUrl()}/auth?error=google_sign_in_failed`,
@@ -72,12 +73,15 @@ authRouter.get(
   },
   (req, res) => {
     const user = req.user as { userId?: number; created?: boolean } | undefined;
+    console.log('[auth] Google callback completed, req.user:', user);
     if (!user?.userId) {
+      console.warn('[auth] No user or userId after Google auth');
       res.redirect(302, `${getFrontendUrl()}/auth?error=google_no_user`);
       return;
     }
     const token = generateToken(user.userId);
     const callbackUrl = `${getFrontendUrl()}/auth/callback${user.created ? '?mode=set-password' : ''}#token=${encodeURIComponent(token)}`;
+    console.log('[auth] Redirecting to frontend with token:', callbackUrl);
     res.redirect(302, callbackUrl);
   },
 );
