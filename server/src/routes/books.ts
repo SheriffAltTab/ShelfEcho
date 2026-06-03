@@ -156,6 +156,13 @@ booksRouter.get('/trending', async (_req, res) => {
   try {
     const url = 'https://openlibrary.org/trending/daily.json?limit=20';
     const response = await fetch(url);
+    
+    if (!response.ok) {
+      console.error(`[books/trending] OpenLibrary returned ${response.status}: ${response.statusText}`);
+      res.status(502).json({ error: `OpenLibrary error: ${response.statusText}` });
+      return;
+    }
+    
     const data = await response.json();
 
     const books = (data.works || []).map((doc: any) => ({
@@ -170,7 +177,7 @@ booksRouter.get('/trending', async (_req, res) => {
     setCache(cacheKey, result);
     res.json(result);
   } catch (error) {
-    console.error('OpenLibrary trending error:', error);
+    console.error('[books/trending] Error:', error instanceof Error ? error.message : String(error));
     res.status(500).json({ error: 'Failed to get trending books' });
   }
 });
