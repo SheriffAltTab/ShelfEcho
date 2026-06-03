@@ -13,6 +13,8 @@ interface BookCardProps {
   showRating?: boolean;
   isLiked?: boolean;
   loading?: 'lazy' | 'eager';
+  coverSize?: 'S' | 'M' | 'L';
+  imageSizes?: string;
   onLike?: (e: React.MouseEvent) => void;
 }
 
@@ -27,9 +29,11 @@ export function BookCard({
   showRating = false,
   isLiked = false,
   loading = 'lazy',
+  coverSize = 'M',
+  imageSizes = '(max-width: 640px) 144px, 176px',
   onLike,
 }: BookCardProps) {
-  const coverUrl = getBookCoverUrl(coverId, 'M');
+  const coverUrl = getBookCoverUrl(coverId, coverSize);
 
   return (
     <motion.div
@@ -56,10 +60,11 @@ export function BookCard({
             className="absolute inset-0 w-full h-full object-cover rounded-r-md rounded-l-sm"
             decoding="async"
             loading={loading}
+            fetchPriority={loading === 'eager' ? 'high' : 'auto'}
             width={176}
             height={256}
-            srcSet={`${getBookCoverUrl(coverId, 'S')} 200w, ${getBookCoverUrl(coverId, 'M')} 400w, ${getBookCoverUrl(coverId, 'L')} 800w`}
-            sizes="(max-width: 640px) 144px, 176px"
+            srcSet={`${getBookCoverUrl(coverId, 'S')} 80w, ${getBookCoverUrl(coverId, 'M')} 180w, ${getBookCoverUrl(coverId, 'L')} 500w`}
+            sizes={imageSizes}
           />
         ) : (
           <>

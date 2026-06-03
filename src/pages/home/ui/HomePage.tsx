@@ -38,13 +38,13 @@ export function HomePage() {
   const heroBook = heroBooks[0];
 
   useEffect(() => {
-    if (!heroBook) return;
-    const href = getBookCoverUrl(heroBook.coverId, 'M');
-    if (!href) return;
+    if (!heroBook?.coverId) return;
     const link = document.createElement('link');
     link.rel = 'preload';
     link.as = 'image';
-    link.href = href;
+    link.href = getBookCoverUrl(heroBook.coverId, 'L');
+    link.imageSrcset = `${getBookCoverUrl(heroBook.coverId, 'S')} 80w, ${getBookCoverUrl(heroBook.coverId, 'M')} 180w, ${getBookCoverUrl(heroBook.coverId, 'L')} 500w`;
+    link.imageSizes = '(max-width: 640px) 192px, 224px';
     document.head.appendChild(link);
     return () => { document.head.removeChild(link); };
   }, [heroBook]);
@@ -161,6 +161,8 @@ export function HomePage() {
                   coverId={heroBook.coverId}
                   coverColor={getBookColor(heroBook.key)}
                   loading="eager"
+                  coverSize="L"
+                  imageSizes="(max-width: 640px) 192px, 224px"
                   className="w-48 sm:w-56 transform rotate-3 group-hover:rotate-0 transition-all duration-500"
                   onClick={() => navigate(bookPath(heroBook.key))}
                 />
@@ -268,7 +270,7 @@ export function HomePage() {
                           width={96}
                           height={144}
                           decoding="async"
-                          srcSet={`${getBookCoverUrl(book.cover_id, 'S')} 120w, ${getBookCoverUrl(book.cover_id, 'M')} 240w, ${getBookCoverUrl(book.cover_id, 'L')} 480w`}
+                          srcSet={`${getBookCoverUrl(book.cover_id, 'S')} 80w, ${getBookCoverUrl(book.cover_id, 'M')} 180w, ${getBookCoverUrl(book.cover_id, 'L')} 500w`}
                           sizes="96px"
                         />
                       ) : (
