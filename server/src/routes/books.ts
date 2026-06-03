@@ -39,6 +39,11 @@ booksRouter.get('/search', async (req, res) => {
       url += '&sort=rating';
     }
     const response = await fetch(url);
+    if (!response.ok) {
+      console.error(`[books/search] OpenLibrary returned ${response.status}: ${response.statusText}`);
+      res.status(502).json({ error: `OpenLibrary error: ${response.statusText}` });
+      return;
+    }
     const data = await response.json();
 
     const books = data.docs.map((doc: any) => ({
@@ -74,8 +79,10 @@ booksRouter.get('/search', async (req, res) => {
 
     res.json({ total, books });
   } catch (error) {
-    console.error('OpenLibrary search error:', error);
-    res.status(500).json({ error: 'Failed to search books' });
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    const errorCode = (error as any)?.code || 'UNKNOWN';
+    console.error(`[books/search] Network error - Code: ${errorCode}, Message: ${errorMsg}`, error);
+    res.status(503).json({ error: 'Failed to reach OpenLibrary API' });
   }
 });
 
@@ -95,6 +102,11 @@ booksRouter.get('/details', async (req, res) => {
   try {
     const workUrl = `https://openlibrary.org/${workId.replace(/^\//, '')}.json`;
     const workRes = await fetch(workUrl);
+    if (!workRes.ok) {
+      console.error(`[books/details] OpenLibrary work fetch returned ${workRes.status}`);
+      res.status(502).json({ error: `OpenLibrary error: ${workRes.statusText}` });
+      return;
+    }
     const work = await workRes.json();
 
     // Get author info
@@ -106,8 +118,10 @@ booksRouter.get('/details', async (req, res) => {
         authorKey = aKey.replace(/^\//, '');
         try {
           const authorRes = await fetch(`https://openlibrary.org${aKey}.json`);
-          const author = await authorRes.json();
-          authorName = author.name || 'Unknown Author';
+          if (authorRes.ok) {
+            const author = await authorRes.json();
+            authorName = author.name || 'Unknown Author';
+          }
         } catch { /* ignore */ }
       }
     }
@@ -117,9 +131,11 @@ booksRouter.get('/details', async (req, res) => {
     let ratingsCount = 0;
     try {
       const ratingsRes = await fetch(`https://openlibrary.org/${workId.replace(/^\//, '')}/ratings.json`);
-      const ratings = await ratingsRes.json();
-      ratingsAverage = ratings.summary?.average || 0;
-      ratingsCount = ratings.summary?.count || 0;
+      if (ratingsRes.ok) {
+        const ratings = await ratingsRes.json();
+        ratingsAverage = ratings.summary?.average || 0;
+        ratingsCount = ratings.summary?.count || 0;
+      }
     } catch { /* ignore */ }
 
     const description = typeof work.description === 'string'
@@ -142,8 +158,10 @@ booksRouter.get('/details', async (req, res) => {
     setCache(cacheKey, result, 5 * 60 * 1000);
     res.json(result);
   } catch (error) {
-    console.error('OpenLibrary details error:', error);
-    res.status(500).json({ error: 'Failed to get book details' });
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    const errorCode = (error as any)?.code || 'UNKNOWN';
+    console.error(`[books/details] Network error - Code: ${errorCode}, Message: ${errorMsg}`, error);
+    res.status(503).json({ error: 'Failed to reach OpenLibrary API' });
   }
 });
 
@@ -155,6 +173,7 @@ booksRouter.get('/trending', async (_req, res) => {
 
   try {
     const url = 'https://openlibrary.org/trending/daily.json?limit=20';
+    console.log(`[books/trending] Attempting to fetch from ${url}`);
     const response = await fetch(url);
     
     if (!response.ok) {
@@ -177,8 +196,10 @@ booksRouter.get('/trending', async (_req, res) => {
     setCache(cacheKey, result);
     res.json(result);
   } catch (error) {
-    console.error('[books/trending] Error:', error instanceof Error ? error.message : String(error));
-    res.status(500).json({ error: 'Failed to get trending books' });
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    const errorCode = (error as any)?.code || 'UNKNOWN';
+    console.error(`[books/trending] Network error - Code: ${errorCode}, Message: ${errorMsg}`, error);
+    res.status(503).json({ error: 'Failed to reach OpenLibrary API. Server cannot connect to OpenLibrary.' });
   }
 });
 
@@ -193,7 +214,13 @@ booksRouter.get('/subject/:subject', async (req, res) => {
 
   try {
     const url = `https://openlibrary.org/subjects/${encodeURIComponent(subject)}.json?limit=${limit}`;
+    console.log(`[books/subject] Attempting to fetch from ${url}`);
     const response = await fetch(url);
+    if (!response.ok) {
+      console.error(`[books/subject] OpenLibrary returned ${response.status}: ${response.statusText}`);
+      res.status(502).json({ error: `OpenLibrary error: ${response.statusText}` });
+      return;
+    }
     const data = await response.json();
 
     const books = (data.works || []).map((doc: any) => ({
@@ -209,8 +236,10 @@ booksRouter.get('/subject/:subject', async (req, res) => {
     setCache(cacheKey, result);
     res.json(result);
   } catch (error) {
-    console.error('OpenLibrary subject error:', error);
-    res.status(500).json({ error: 'Failed to get books by subject' });
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    const errorCode = (error as any)?.code || 'UNKNOWN';
+    console.error(`[books/subject] Network error for '${subject}' - Code: ${errorCode}, Message: ${errorMsg}`, error);
+    res.status(503).json({ error: 'Failed to reach OpenLibrary API. Server cannot connect to OpenLibrary.' });
   }
 });
 
