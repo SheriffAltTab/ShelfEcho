@@ -140,34 +140,19 @@ API також повертає `primarySignal`, `explanationTags`, `whyThisBook
 
 ## Змінні середовища
 
-Секрети не хардкодяться. Для локальної розробки скопіюйте приклади:
-
-```powershell
-Copy-Item .env.example .env
-Copy-Item server\.env.example server\.env
-```
-
-Фронтенд `.env`:
-
-| Змінна | Опис |
-| --- | --- |
-| `VITE_API_URL` | URL API, наприклад `http://localhost:3001` або `https://shelfecho.site/api` |
-
-Бекенд `server/.env`:
-
 | Змінна | Опис |
 | --- | --- |
 | `NODE_ENV` | `development` або `production` |
 | `PORT` | порт API, типово `3001` |
 | `BIND_HOST` | адреса bind для Express, типово `0.0.0.0` |
 | `FRONTEND_URL` | URL фронтенду для CORS, email-посилань і OAuth redirect |
-| `JWT_SECRET` | секрет для JWT; у production обов’язковий |
+| `JWT_SECRET` | секрет для JWT |
 | `EMAIL_FROM` | адреса відправника листів |
 | `GMAIL_USER` | Gmail-акаунт для Nodemailer |
-| `GMAIL_APP_PASSWORD` | Gmail App Password, не звичайний пароль |
+| `GMAIL_APP_PASSWORD` | Gmail App Password |
 | `GOOGLE_CLIENT_ID` | Google OAuth client ID |
 | `GOOGLE_CLIENT_SECRET` | Google OAuth client secret |
-| `GOOGLE_REDIRECT_URI` | callback URL, наприклад `https://shelfecho.site/api/auth/google/callback` |
+| `GOOGLE_REDIRECT_URI` | callback URL |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` | альтернативний SMTP-провайдер замість Gmail |
 
 GitHub Secrets для деплою:
@@ -185,8 +170,6 @@ GitHub Secrets для деплою:
 | `GOOGLE_CLIENT_SECRET` | Google OAuth client secret |
 | `GOOGLE_REDIRECT_URI` | Google OAuth callback |
 
-Якщо production API стартує без критичних змінних (`JWT_SECRET`, email або Google OAuth), ініціалізація зупиниться з чіткою помилкою. У development система виводить попередження, а email/Google endpoints повертають контрольовані помилки, якщо сервіс не налаштований.
-
 ## CloudFlare
 
 Проєкт використовує CloudFlare для покращення продуктивності та безпеки:
@@ -198,15 +181,6 @@ GitHub Secrets для деплою:
 - **Firewall**: WAF (Web Application Firewall) для блокування шкідливих запитів
 - **Analytics**: Детальна статистика трафіку та продуктивності
 
-### Налаштування CloudFlare
-
-1. Додайте домен у CloudFlare Dashboard
-2. Оновіть DNS-записи на CloudFlare nameservers
-3. Налаштуйте SSL/TLS режим на "Full (strict)"
-4. Додайте правила Page Rules або Rules для кешування API відповідей
-5. Увімкніть Always Use HTTPS
-6. Налаштуйте Rate Limiting, якщо потрібно
-
 ### Важливі headers
 
 CloudFlare передає додаткові headers для ідентифікації трафіку:
@@ -216,24 +190,11 @@ CloudFlare передає додаткові headers для ідентифіка
 - `CF-IPCountry`: Країна клієнта
 - `CF-Visitor`: Інформація про протокол (HTTP/HTTPS)
 
-Для отримання справжньої IP клієнта використовуйте `CF-Connecting-IP` замість `req.ip` у Express middleware.
-
 Бекенд включає middleware, що автоматично встановлює `req.clientIp` на справжню IP клієнта (з `CF-Connecting-IP` якщо доступний, інакше `req.ip`). Оригінальна IP CloudFlare зберігається в `req.cloudflareIp`.
-
-### Перевірка CloudFlare
-
-Після підключення перевірте:
-
-1. HTTPS працює автоматично
-2. Статичні ресурси кешуються (перевірте headers `CF-Cache-Status`)
-3. CF-RAY header присутній у відповідях
-4. SSL-сертифікат валідний (перевірте на sslabs.com)
-
-API endpoint для перевірки: `GET /api/auth/me` - має повертати CF-RAY у headers.
 
 ## Локальний запуск
 
-Встановіть залежності у корені та в бекенді:
+Встановлення залежностей у корені та в бекенді:
 
 ```powershell
 npm install
@@ -254,39 +215,6 @@ npm run dev
 npm run dev:client
 npm run dev:server
 ```
-
-Якщо PowerShell блокує `npm.ps1`, використовуйте:
-
-```powershell
-npm.cmd run dev
-npm.cmd run build
-```
-
-Типові адреси:
-
-- фронтенд: `http://localhost:5173`
-- API: `http://localhost:3001`
-
-## Скрипти
-
-Корінь:
-
-| Команда | Опис |
-| --- | --- |
-| `npm run dev` | фронтенд + бекенд одночасно |
-| `npm run dev:client` | тільки Vite |
-| `npm run dev:server` | тільки Express API |
-| `npm run build` | TypeScript build + Vite production build |
-| `npm run lint` | ESLint |
-| `npm run preview` | preview зібраного фронтенду |
-
-Бекенд:
-
-| Команда | Опис |
-| --- | --- |
-| `npm run dev` | `tsx watch src/index.ts` |
-| `npm run build` | компіляція TypeScript у `server/dist` |
-| `npm run start` | запуск `server/dist/index.js` |
 
 ## База даних
 
@@ -368,7 +296,7 @@ Self-service видалення доступне у профілі корист�
 - видаляється запис `users`;
 - каскадно стираються reading list, favorites, comments, reports, achievements і not interested;
 - вручну очищається `search_logs`, бо це аналітична таблиця без FK;
-- локальний аватар із `server/uploads` видаляється, якщо він належить цьому застосунку;
+- локальний аватар із `server/uploads` видаляється, якщо він належить застосунку;
 - JWT стає недійсним, бо користувача більше немає в базі.
 
 ## Деплой
@@ -383,7 +311,7 @@ Workflow `.github/workflows/deploy.yml` запускається при push у 
 6. Збирає бекенд.
 7. Перезапускає PM2 процес `shelfecho`.
 
-Перед деплоєм додайте всі GitHub Secrets із розділу “Змінні середовища”.
+Перед деплоєм необхідно додати всі GitHub Secrets із розділу “Змінні середовища”.
 
 ## Продуктивність
 
@@ -403,5 +331,3 @@ npm.cmd run build
 cd ..
 npm.cmd run build
 ```
-
-Очікувано Vite може попередити про великий chunk. Це не блокує build, але для майбутньої оптимізації варто винести важкі частини у додаткові chunks.
